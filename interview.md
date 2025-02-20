@@ -2,6 +2,8 @@
 **SSO(Single Sign-on)**:即单点登录，指在分布式应用系统中，用户在一次身份认证后就可以访问所有**相互信任**的应用系统，而无需再次输入凭据。
 SSO底层常见的由**SAML**,**OAuth**或者**OpenID Connect**实现。
 
+微软的 Office 365 应用（例如 Teams、Outlook、OneNote）实现无缝登录，是基于 Entra ID 提供的单点登录（SSO）机制，其背后的认证协议是 OpenID Connect，它构建在 OAuth 2.0 之上。实际上，这种体验通常是通过“静默令牌获取”实现的，即在首次登录后，利用 Windows Integrated Authentication（Kerberos）和缓存的令牌来自动续期或获取新的访问令牌，而不会再次提示用户登录。这种机制在 OAuth 2.0 中通常对应的是授权码模式（在桌面和浏览器环境中可能结合 PKCE）或者隐式流，但对用户来说，这一切都是透明的。
+
 ## What is SAML(Security Assertion Markup Language)
 **SAML 协议**：SSO 常见实现方式之一是基于SAML（Security Assertion Markup Language）协议，也有基于OAuth/OpenID Connect的实现。
 **SAML Assertion**：SAMLAssertion是SAML协议中的一种**安全断言**，包含用户身份信息、认证信息、授权信息等。
@@ -71,6 +73,7 @@ SAML Artifact contain a unique identifier. SP send a artifact resolve message to
 ![image](https://github.com/user-attachments/assets/c8aa814a-629a-4fb0-8c45-5be30767a489)
 
 **what is in Assertion:**
+SAML Assertion 是一段基于 **XML** 的安全断言，用于在身份提供方（IdP）和服务提供方（SP）之间传递用户认证和授权信息。它包含**用户标识（Subject）**、**认证方式和时间（AuthnStatement）**、**以及可选的用户属性（AttributeStatement)** 等，并通过**数字签名保证完整性与可信度**。服务提供方在接收并验证 SAML Assertion 后，就能识别用户身份、为其创建本地会话，从而实现跨域单点登录（SSO）。
 1. Name ID
 2. Method to authenticate:
 
