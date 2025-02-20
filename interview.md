@@ -25,6 +25,7 @@ SSO底层常见的由**SAML**,**OAuth**或者**OpenID Connect**实现。
 1. 在 **Entra ID** 中创建 **Enterprise Application**
 2. 在 Single Sign-On 中**选择 SAML 方式**,并且在entra ID中将**Fedration Metadata XML**下载下来
 3. **建立信任关系:** 将 Entra ID 下载的 **Fedration Metadata XML**(IDP XML, configurations and certificate) 并将其上传至目标应用（SP），同时将目标应用的Metadata(SP XML, configurations and certificate)传至 Entra ID
+
    **Metadata**：
    1. **name ID format**：
 
