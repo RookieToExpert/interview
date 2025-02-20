@@ -13,12 +13,21 @@ SSO底层常见的由**SAML**,**OAuth**或者**OpenID Connect**实现。
 
 **使用者的角度(IDP-initiate)：**
 1. 在**Entra ID**中注册应用：管理员在Azure门户(portal.azure.com)给某个**SaaS**或自有应用配置 **“企业应用”(Enterprise Applications)**，并开启SAML SSO。
-2. 用户访问**应用(SP)**：当用户初次访问该应用时，应用会将用户**重定向到Entra ID**进行身份验证。
-3. **Entra ID认证**：如果用户已在该浏览器中登录**Azure AD**，会自动完成**SSO**；如果没有，则用户**输入Entra ID账户**（如用户名@contoso.onmicrosoft.com）和密码或者通过Windows Hello、MFA等方式验证。
-4. Entra ID返回**SAML Assertion**：Entra ID会生成一份**签名的SAML断言**，包含**用户身份、组信息等**，根据管理员在**Entra ID中的配置**(Attributes & Claims)。
-5. 用户通过**post method**将SAML Assertion发给SP
-6. 应用(SP)验证Assertion：**验证签名、时效等后**，创建本地会话(session)，用户即完成单点登录。
-7. 或者是SP-initiate：用户先访问SP-initiate，SP **redirect**用户到IDP，后面的步骤相同。
+2. 用户访问**应用(SP)**：当用户初次访问该应用时，应用构建一个SAML AuthnRequest将用户**重定向到Entra ID**的SSO接口进行身份验证:
+
+   ![image](https://github.com/user-attachments/assets/8ac0ca5d-4eb3-4807-b6d6-096248c094ce)
+
+4. **Entra ID认证**：如果用户已在该浏览器中登录**Azure AD**，会自动完成**SSO**；如果没有，则用户**输入Entra ID账户**（如用户名@contoso.onmicrosoft.com）和密码或者通过Windows Hello、MFA等方式验证。
+5. Entra ID返回**SAML Assertion**：Entra ID会生成一份**签名的SAML断言**，包含**用户身份、组信息等**，根据管理员在**Entra ID中的配置**(Attributes & Claims)：
+
+   ![image](https://github.com/user-attachments/assets/b3c90239-fcf1-4eef-89ec-ee16f947fa25)
+
+6. 用户浏览器通过**post method**将SAML Assertion发给SP的ACS(Assertion Consumer Service) URL:
+
+   ![image](https://github.com/user-attachments/assets/e050b6ad-9b14-4b58-8635-a942dc10de18)
+
+8. 应用(SP)验证Assertion：**验证签名、时效等后**，创建本地会话(session)，用户即完成单点登录。
+9. 或者是SP-initiate：用户先访问SP-initiate，SP **redirect**用户到IDP，后面的步骤相同。
 
 
 **管理者的角度：**
