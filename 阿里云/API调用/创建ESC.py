@@ -1,3 +1,4 @@
+# pip install aliyun-python-sdk-ecs
 from aliyunsdkcore.client import AcsClient
 client = AcsClient("<access_key_id>", "<access_secret>", "cn-hangzhou")
 request = CreateInstanceRequest()
