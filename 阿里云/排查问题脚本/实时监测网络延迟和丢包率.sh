@@ -8,3 +8,5 @@ while true; do
   echo "[$timestamp] $ping_result"
   sleep $interval
 done
+
+# [2023-09-10 14:00:00] 4 packets transmitted, 4 received, 0% packet loss, time 3004ms rtt min/avg/max/mdev = 10.123/12.456/15.789/2.123 ms
