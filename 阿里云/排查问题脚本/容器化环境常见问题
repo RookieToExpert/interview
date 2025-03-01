@@ -1,0 +1,11 @@
+# 查看Pod详细状态和事件
+kubectl describe pod <pod-name>
+
+# 查看容器日志（含历史崩溃容器的日志）
+kubectl logs <pod-name> --previous
+
+# 进入容器调试
+kubectl exec -it <pod-name> -- /bin/sh
+
+# 检查节点资源使用
+kubectl top nodes
