@@ -1,4 +1,4 @@
-客户是在本地自建的k8s集群，集群通过kubeadm部署，有5个命名空间，其中两个是业务系统(订单系统和客户服务系统)，剩下的是测试和监控等。K8s版本是1.26，我们Arc注册时需要升级。
+客户是在本地自建的k8s集群，集群通过kubeadm部署，有5个命名空间，其中两个是业务系统(订单系统和客户服务系统)，剩下的是测试和监控等。K8s版本是1.26。
 希望备份业务相关的两个命名空间，希望备份的内容是所有YAML对象资源(deployment, service, configmag, secret等)，所有持久化数据卷(PVC, NFS后端等)。
 集群中有运行PostgreSQL和Redis，都以StatefulSet 方式部署。Redis 有持久化，Postgres 数据存在 PVC 中。文件上传也存在NFS的挂载卷里，也需要备份。
 关于RPO要求小于30分钟，RTO一小时内，希望支持namespace，单个工作负载，PVC粒度恢复。
@@ -16,59 +16,108 @@ velero install \
     --backup-location-config resourceGroup=<your-rg>,storageAccount=<your-sa>,subscriptionId=<your-sub-id> \
     --use-volume-snapshots=false \
     --use-restic
+
+velero install \
+  --provider azure \
+  --plugins velero/velero-plugin-for-microsoft-azure:v1.7.0,velero/velero-plugin-for-restic:v1.7.0 \
+  --bucket velero \
+  --secret-file ./credentials-velero \
+  --use-volume-snapshots=false \
+  --backup-location-config resourceGroup=...,storageAccount=...,subscriptionId=... \
+  --snapshot-location-config apiTimeout=5m
+
 ```
-设置备份主体和备份频率，编写相关的YAML文件：
+>必须安装Rstic
+
+><img width="592" height="265" alt="image" src="https://github.com/user-attachments/assets/28d3fa67-45b2-4af1-9e3c-8ff1921e0137" />
+
+## 标记PVC以启动Restic
+```yaml
+annotations:
+  backup.velero.io/backup-volumes: <volume-name>
+```
+
+比如redis的Statefulset：
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: order-system
+spec:
+  template:
+    metadata:
+      annotations:
+        backup.velero.io/backup-volumes: redis-data
+```
+
+## 编写一次性手动备份的YAML文件：
 备份主体：
 ```yaml
+# manual-backup.yaml
 apiVersion: velero.io/v1
 kind: Backup
 metadata:
-  name: daily-backup-orders
+  name: manual-backup
   namespace: velero
 spec:
   includedNamespaces:
-  - orders
-  - payments
+  - order-system
+  - customer-system
   includedResources:
   - deployments
-  - statefulsets
-  - persistentvolumeclaims
+  - services
+  - configmaps
   - secrets
-  snapshotVolumes: true
-  ttl: 720h0m0s  # 保留 30 天
-  storageLocation: default
+  - persistentvolumeclaims
+  defaultVolumesToRestic: true
+  ttl: 72h
 ```
-编写备份频率的yaml文件：
+
+**执行on-demand backup:**
+```kubectl
+kubectl apply -f daily-backup-schedule.yaml
+```
+
+## 编写自动备份的yaml文件：
 ```yaml
+# daily-backup-schedule.yaml
 apiVersion: velero.io/v1
 kind: Schedule
 metadata:
   name: daily-backup
   namespace: velero
 spec:
-  schedule: "0 2 * * *"  # 每天凌晨2点，Cron表达式
+  schedule: "*/30 * * * *"  # 每 30 分钟一次，满足 RPO
   template:
-    ttl: 168h0m0s  # 每个备份保留 7 天
     includedNamespaces:
-    - orders
-    - payments
-    snapshotVolumes: true
+    - order-system
+    - customer-system
+    ttl: 168h  # 保留 7 天
+    defaultVolumesToRestic: true
+    includedResources:
+    - deployments
+    - services
+    - configmaps
+    - secrets
+    - persistentvolumeclaims
 ```
-然后执行yaml文件：
+**然后执行yaml文件：**
 ```yaml
 kubectl apply -f daily-schedule.yaml
 ```
-可以通过velero查看计划和备份记录以及恢复：
+
+**可以通过velero查看计划和备份记录以及恢复：**
 ```velero
 velero get schedules
 velero get backups
 velero restore create --from-backup daily-backup-20240719
 ```
+
 **遇到restic容器没权限的问题，通过PodSecurityPolicy或者设置hostPID: true.**
 恢复目标希望是在本地恢复，但是也能够接受恢复到另一台新集群。
-没有做过恢复演练，可以集成GitOps。
 数据加密需要全程加密TLS 1.2及以上，存储端使用Azure Blob的SSE + CMK加密。
 希望通过key vault管理密钥，权限通过RBAC审批。数据中包含金融交易记录，需要启用Blob的blob versioning或不可篡改策略。
 希望备份数据可以复制一份到另一个azure region，保证备份数据的高可用。
 本地集群无法直接访问公网，只能通过expressroute或私有通道。
-不提供k8s集群的admin账户，但可以通过azure arc注入权限，备份状态和失败情况也希望能够推送到azure monitor和log analytics中。
+
