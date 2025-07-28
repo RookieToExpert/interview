@@ -15,40 +15,15 @@ velero install \
     --secret-file ./credentials-velero \
     --backup-location-config resourceGroup=<your-rg>,storageAccount=<your-sa>,subscriptionId=<your-sub-id> \
     --use-volume-snapshots=false \
-    --use-restic
 
 velero install \
   --provider azure \
-  --plugins velero/velero-plugin-for-microsoft-azure:v1.7.0,velero/velero-plugin-for-restic:v1.7.0 \
+  --plugins velero/velero-plugin-for-microsoft-azure:v1.7.0 \
   --bucket velero \
   --secret-file ./credentials-velero \
-  --use-volume-snapshots=false \
+  --use-volume-snapshots=true \
   --backup-location-config resourceGroup=...,storageAccount=...,subscriptionId=... \
-  --snapshot-location-config apiTimeout=5m
-
-```
->必须安装Rstic
-
-><img width="592" height="265" alt="image" src="https://github.com/user-attachments/assets/28d3fa67-45b2-4af1-9e3c-8ff1921e0137" />
-
-## 标记PVC以启动Restic
-```yaml
-annotations:
-  backup.velero.io/backup-volumes: <volume-name>
-```
-
-比如redis的Statefulset：
-```yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: redis
-  namespace: order-system
-spec:
-  template:
-    metadata:
-      annotations:
-        backup.velero.io/backup-volumes: redis-data
+  --volume-snapshot-location-config resourceGroup=<your-disk-rg>,subscriptionId=<your-sub-id>
 ```
 
 ## 编写一次性手动备份的YAML文件：
@@ -114,10 +89,13 @@ velero get backups
 velero restore create --from-backup daily-backup-20240719
 ```
 
-**遇到restic容器没权限的问题，通过PodSecurityPolicy或者设置hostPID: true.**
-恢复目标希望是在本地恢复，但是也能够接受恢复到另一台新集群。
-数据加密需要全程加密TLS 1.2及以上，存储端使用Azure Blob的SSE + CMK加密。
+## 遇到网络问题，无法连接blobPE
+数据加密需要全程加密TLS 1.2及以上，存储端使用Azure Blob的SSE + CMK加密，客户K8S宿主机没有public IP，本地网络架构靠一台NVA作为出站流量，客户已经配置了express route到VNET1，目前storage account的private endpoint在VNET2，通过Vnet peering去解决连通问题，我们是通过private dns resolver去解决解析问题。
 希望通过key vault管理密钥，权限通过RBAC审批。数据中包含金融交易记录，需要启用Blob的blob versioning或不可篡改策略。
+可以通过kubectl logs deployment/velero -n velero去查看velero的报错
+
+恢复目标希望是在本地恢复，但是也能够接受恢复到另一台新集群。
+
 希望备份数据可以复制一份到另一个azure region，保证备份数据的高可用。
 本地集群无法直接访问公网，只能通过expressroute或私有通道。
 
