@@ -2,7 +2,7 @@
 希望备份业务相关的两个命名空间，希望备份的内容是所有YAML对象资源(deployment, service, configmag, secret等)，所有持久化数据卷(PVC, NFS后端等)。
 集群中有运行PostgreSQL和Redis，都以StatefulSet 方式部署。Redis 有持久化，Postgres 数据存在 PVC 中。文件上传也存在NFS的挂载卷里，也需要备份。
 关于RPO要求小于30分钟，RTO一小时内，希望支持namespace，单个工作负载，PVC粒度恢复。
-**我们在本地集群中部署Azure Arc Agent，注册集群到ARM，启用resource group管理，然后创建一个azure storage account，并且启用GRS备份冗余作为备份数据，启用cmk加密，通过key vault绑定，并且根据客户要求数据中包含金融交易记录，
+**我们创建resource group，然后创建一个azure storage account，并且启用GRS备份冗余作为备份数据，启用cmk加密，通过key vault绑定，并且根据客户要求数据中包含金融交易记录，
 启用Blob的blob versioning和不可篡改策略，在本地集群中部署Velero控制器，配置azure plugin制定备份目标为blob storage，使用storage access key。**
 
 ## 安装Velero
