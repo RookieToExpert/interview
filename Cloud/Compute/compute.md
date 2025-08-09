@@ -3,7 +3,7 @@
 | 类别                 | Azure                                | AWS                                | 阿里云                             | 说明 / 使用场景                                                                 |
 |----------------------|---------------------------------------|------------------------------------|------------------------------------|--------------------------------------------------------------------------------|
 | 虚拟机（IaaS）        | Azure VM                             | EC2                                | ECS（云服务器）                     | 基础虚拟机服务，适合自建服务、旧系统迁移、操作系统自定义                                                      |
-| 容器服务（轻量级）     | Container App                        | App Runner / ECS + Fargate         | 容器服务 ASK（Serverless K8s）      | 托管容器服务，免维护集群，支持自动伸缩，适合 API、微服务、低运维场景                                          |
+| 容器服务（轻量级）     | Container App                       | App Runner / ECS + Fargate         | 容器服务 ASK（Serverless K8s）      | 托管容器服务，免维护集群，支持自动伸缩，适合 API、微服务、低运维场景                                          |
 | 容器实例              | Container Instance (ACI)             | ECS RunTask / Fargate              | 弹性容器实例（ECI）                 | 最快上线方式，适合一次性脚本、测试、定时任务等轻量临时工作负载                                                  |
 | Web 应用部署平台       | Web App for App Service              | Elastic Beanstalk / Amplify        | Web应用托管 / 函数计算              | 支持代码部署，自动 HTTPS、CI/CD，适合中小企业常规 Web 应用开发                                                   |
 | 托管 Kubernetes       | AKS (Azure Kubernetes Service)       | EKS                                | ACK（容器服务 Kubernetes 版）       | 托管 K8s，适合微服务架构、企业集群、多服务部署                                                                    |
