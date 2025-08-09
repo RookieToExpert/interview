@@ -1,3 +1,4 @@
+[返回compute](https://github.com/RookieToExpert/interview/blob/main/Cloud/Compute/compute.md)
 ## 创建新的rg，storage account
 
 <img width="1453" height="541" alt="image" src="https://github.com/user-attachments/assets/099597ab-3bbc-4be7-9478-554ebbf06d76" />
@@ -26,4 +27,5 @@ yaml文件：
 <img width="1295" height="564" alt="image" src="https://github.com/user-attachments/assets/9ff8de3c-2ba1-45a3-8962-0d8ed99e3c05" />
 
 <img width="1887" height="597" alt="image" src="https://github.com/user-attachments/assets/28b0fcdf-8c16-474e-bc02-9fc1b4b78671" />
+
 
