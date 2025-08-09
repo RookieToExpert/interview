@@ -1,3 +1,4 @@
+[返回compute](https://github.com/RookieToExpert/interview/blob/main/Cloud/Compute/compute.md)
 ## Scale out option
 
 ![alt text](image-10.png)
@@ -33,5 +34,6 @@
     ![alt text](image-16.png)
 
     可以看到5个replicas被创建：
+
 
     ![alt text](image-17.png)
