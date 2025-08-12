@@ -194,5 +194,35 @@ NGINX
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo ln -s /etc/nginx/sites-available/timeapp /etc/nginx/sites-enabled/timeapp
 sudo nginx -t && sudo systemctl restart nginx
+```
 
+#### 4. 
+
+```shell
+  # 1) 依赖
+sudo apt-get update -y
+sudo apt-get install -y ca-certificates curl gnupg
+
+# 2) 加 Docker 官方 APT 源
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+| sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update -y
+
+# 3) 安装 Docker + Buildx + Compose v2（plugin）
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# 4) 处理 docker 组 & 服务
+sudo groupadd -f docker
+sudo usermod -aG docker $USER
+sudo systemctl enable --now docker
+
+# 5) 让当前会话立刻生效（或重新登录）
+newgrp docker
+
+# 6) 验证
+docker --version
+docker compose version
 ```
