@@ -5,10 +5,11 @@
   sudo apt-get install -y nginx
   sudo systemctl enable nginx
   ```
-#### 2. 放置前端静态网页
+#### 2. 放置前端静态网页 /var/www/timeapp/index.html
+  i. 创建静态网页的目录：sudo mkdir -p /var/www/timeapp
+
+  ii. 将html文件写入index.html： sudo tee /var/www/timeapp/index.html >/dev/null <<'HTML'
 ```html
-sudo mkdir -p /var/www/timeapp
-sudo tee /var/www/timeapp/index.html >/dev/null <<'HTML'
 <!doctype html>
 <html lang="zh-CN">
 <head>
@@ -141,10 +142,10 @@ document.getElementById('logout').onclick = ()=>{ showDash(false); };
 </body>
 </html>
 HTML
-```
-#### 3. 配置Nginx站点(含临时Mock API)
+```  
+#### 3. 配置Nginx站点(含临时Mock API) /etc/nginx/site-available/timeapp
+将timeapp中写入API逻辑：sudo tee /etc/nginx/sites-available/timeapp >/dev/null <<'NGINX'
 ```nginx
-sudo tee /etc/nginx/sites-available/timeapp >/dev/null <<'NGINX'
 server {
     listen 80;
     server_name _;
@@ -189,14 +190,17 @@ server {
     # }
 }
 NGINX
-
-# 启用站点
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo ln -s /etc/nginx/sites-available/timeapp /etc/nginx/sites-enabled/timeapp
-sudo nginx -t && sudo systemctl restart nginx
 ```
 
-#### 4. 
+#### 4. 启用站点
+  i. sudo rm -f /etc/nginx/sites-enabled/default
+  ii. sudo ln -s /etc/nginx/sites-available/timeapp /etc/nginx/sites-enabled/timeapp
+  iii. sudo nginx -t && sudo systemctl restart nginx
+
+#### 5. 本机验证
+  i. curl -i http://127.0.0.1/
+  ii. curl -i http://127.0.0.1/api/time/now
+
 
 ```shell
   # 1) 依赖
