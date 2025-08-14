@@ -216,8 +216,8 @@ NGINX
 #### 1. 搭建docker： 
 ```shell
 # 1) 依赖
-sudo apt-get update -y
-sudo apt-get install -y ca-certificates curl gnupg
+sudo apt update -y
+sudo apt install -y ca-certificates curl gnupg
 
 # 2) 加 Docker 官方 APT 源
 sudo install -m 0755 -d /etc/apt/keyrings
