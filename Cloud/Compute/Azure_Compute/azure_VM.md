@@ -1,8 +1,8 @@
 ## 在VMSS中搭建前端
 #### 1. 下载nginx
   ```shell
-  sudo apt-get update -y
-  sudo apt-get install -y nginx
+  sudo apt update -y
+  sudo apt install -y nginx
   sudo systemctl enable nginx
   ```
 #### 2. 放置前端静态网页 /var/www/timeapp/index.html
