@@ -243,9 +243,9 @@ docker --version
 docker compose version
 ```
 #### 2. 写后端代码
-   在opt创建timeapp 目录： ```mkdir -p /opt/timeapp && cd /opt/timeapp```
+   ###### 在opt创建timeapp 目录： ```mkdir -p /opt/timeapp && cd /opt/timeapp```
 
-   写API代码(fast API)：
+   ###### i. 写API代码(fast API)：
    
    ```tee main.py >/dev/null <<'PY'```
    ```python
@@ -327,8 +327,153 @@ docker compose version
               val = cur.fetchone()[0]
               r.set("visits:total", val)
       return {"total": int(val)}
-  PY
+   PY
    ```
-   iii.
+   ###### ii. 写依赖与镜像构建文件
+  ```tee requirements.txt >/dev/null <<'REQ'```
+  ```shell
+fastapi==0.111.0
+uvicorn[standard]==0.30.0
+bcrypt==4.2.0
+psycopg2-binary==2.9.9
+PyJWT==2.8.0
+redis==5.0.7
+  ```
+  ```tee dockerfile >/dev/null <<'DOCK'```
+  ```shell
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY main.py .
+EXPOSE 8000
+CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8000"]
+  ```
+   ###### iii. 写postgreSQL初始化脚本
+   ```tee init.sql >/dev/null << 'SQL'```
+   ```PostgreSQL
+   tee init.sql >/dev/null <<'SQL'
+CREATE EXTENSION IF NOT EXISTS citext;
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  email CITEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS site_counters (
+  id SMALLINT PRIMARY KEY DEFAULT 1,
+  total BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO site_counters(id,total) VALUES (1,0)
+ON CONFLICT (id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS daily_visits (
+  day DATE PRIMARY KEY,
+  total BIGINT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS visit_fingerprints (
+  day DATE NOT NULL,
+  fp  TEXT NOT NULL,
+  PRIMARY KEY(day, fp)
+);
 
-   iiii.
+   ```
+
+   ###### iv. 写docker-compose,构建yaml文件
+   ```tee docker-compose.yaml >/dev/null << 'YAML'```
+   ```yaml
+services:
+  api:
+    build: .
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - SECURE_COOKIES=${SECURE_COOKIES}
+      - PG_DSN=host=postgres dbname=appdb user=app password=app
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=app
+      - POSTGRES_DB=appdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: always
+
+  redis:
+    image: redis:7
+    command: ["redis-server","--appendonly","yes"]
+    volumes:
+      - redisdata:/data
+    restart: always
+
+volumes:
+  pgdata:
+  redisdata:
+   ```
+   ###### v. 写环境变量
+   ```shell
+JWT_SECRET=$(openssl rand -hex 16)
+SECURE_COOKIES=false
+   ```
+
+   ###### vi. 构建并启动容器的镜像
+   ```bash
+cd /opt/timeapi
+docker compose up -d --build
+docker ps
+   ```
+
+#### 3. 本机测试
+```bash
+# API：当前时间
+curl -s http://127.0.0.1:8000/time/now | sed 's/},{/},\n{/g'
+
+# 注册一个测试用户
+curl -s -X POST http://127.0.0.1:8000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"test@example.com","password":"P@ssw0rd"}'
+
+# 登录（返回 {"ok":true} 且会下发 Cookie）
+curl -i -X POST http://127.0.0.1:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"test@example.com","password":"P@ssw0rd"}'
+
+# 记一次访问并查看总数
+curl -s -X POST http://127.0.0.1:8000/metrics/visit
+curl -s http://127.0.0.1:8000/metrics/total
+```
+
+#### 4. 若失败，查看log
+```bash
+docker logs --tail=200 -f $(docker ps -qf name=api)
+docker logs --tail=200 -f $(docker ps -qf name=postgres)
+docker logs --tail=200 -f $(docker ps -qf name=redis)
+```
+
+#### 5. 让前端打到后端(反向代理)
+  ###### i. 修改/etc/nginx/sites-available/timeapp,把 Nginx 的 /api/ 改成反代后端 VMSS 实例的 内网 IP:8000
+  ```shell
+location /api/ {
+    proxy_pass http://<后端-VMSS-实例-内网IP>:8000/;  # 例如 10.10.2.5:8000
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+  ```
+
+  ###### ii. 保存后重新加载nginx
+  ```bash
+sudo nginx -t && sudo systemctl restart nginx
+# 前端机上验证
+curl -s http://127.0.0.1/api/time/now | head
+  ```
+
