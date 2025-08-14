@@ -206,7 +206,7 @@ NGINX
 
   测试Mock节点是否正常运行：
   
-  222222``curl -i http://127.0.0.1/api/time/now```
+  ii. ```curl -i http://127.0.0.1/api/time/now```
 
   iii. ```curl -i http://127.0.0.1/api/metrics/total```
 
