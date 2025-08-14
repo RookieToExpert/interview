@@ -193,17 +193,29 @@ NGINX
 ```
 
 #### 4. 启用站点
-  i. sudo rm -f /etc/nginx/sites-enabled/default
-  ii. sudo ln -s /etc/nginx/sites-available/timeapp /etc/nginx/sites-enabled/timeapp
-  iii. sudo nginx -t && sudo systemctl restart nginx
+  i. ```sudo rm -f /etc/nginx/sites-enabled/default```
+  
+  ii. ```sudo ln -s /etc/nginx/sites-available/timeapp /etc/nginx/sites-enabled/timeapp```
+  
+  iii. ```sudo nginx -t && sudo systemctl restart nginx```
 
 #### 5. 本机验证
-  i. curl -i http://127.0.0.1/
-  ii. curl -i http://127.0.0.1/api/time/now
+  测试Nginx是否正常运行：
+  
+  i. ```curl -i http://127.0.0.1/```
 
+  测试Mock节点是否正常运行：
+  
+  222222``curl -i http://127.0.0.1/api/time/now```
 
+  iii. ```curl -i http://127.0.0.1/api/metrics/total```
+
+  iiii. ```curl -i http://127.0.0.1/api/auth/login```
+
+## 搭建后端
+#### 1. 搭建docker： 
 ```shell
-  # 1) 依赖
+# 1) 依赖
 sudo apt-get update -y
 sudo apt-get install -y ca-certificates curl gnupg
 
@@ -230,3 +242,93 @@ newgrp docker
 docker --version
 docker compose version
 ```
+#### 2. 写后端代码
+   在opt创建timeapp 目录： ```mkdir -p /opt/timeapp && cd /opt/timeapp```
+
+   写API代码(fast API)：
+   
+   ```tee main.py >/dev/null <<'PY'```
+   ```python
+   from fastapi import FastAPI, Request, Response
+  from pydantic import BaseModel, EmailStr
+  from datetime import datetime, timezone
+  from zoneinfo import ZoneInfo
+  import os, bcrypt, jwt, psycopg2, redis
+
+  # ---- 环境变量 ----
+  JWT_SECRET = os.getenv("JWT_SECRET","change_me")
+  SECURE_COOKIES = os.getenv("SECURE_COOKIES","false").lower()=="true"
+  # Postgres/Redis 服务名来自 docker-compose（同机容器名）
+  PG_DSN = os.getenv("PG_DSN","host=postgres dbname=appdb user=app password=app")
+  REDIS_URL = os.getenv("REDIS_URL","redis://redis:6379")
+
+  # ---- 初始化客户端 ----
+  app = FastAPI()
+  r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+  pg = psycopg2.connect(PG_DSN)
+
+  # ---- 模型 ----
+  class Register(BaseModel):
+      email: EmailStr
+      password: str
+
+  class Login(BaseModel):
+      email: EmailStr
+      password: str
+
+  # ---- 业务接口 ----
+  @app.post("/auth/register")
+  def register(body: Register):
+      pw = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+      with pg, pg.cursor() as cur:
+          cur.execute("INSERT INTO users(email,password_hash) VALUES(%s,%s)", (body.email, pw))
+      return {"ok": True}
+
+  @app.post("/auth/login")
+  def login(body: Login, response: Response):
+      with pg, pg.cursor() as cur:
+          cur.execute("SELECT id,password_hash FROM users WHERE email=%s", (body.email,))
+          row = cur.fetchone()
+          if not row: return {"ok": False}
+          uid, hashv = row
+          if not bcrypt.checkpw(body.password.encode(), hashv.encode()):
+              return {"ok": False}
+      token = jwt.encode({"uid": uid}, JWT_SECRET, algorithm="HS256")
+      response.set_cookie("access_token", token, httponly=True, samesite="Lax", secure=SECURE_COOKIES)
+      return {"ok": True}
+
+  @app.get("/time/now")
+  def time_now():
+      cities=[("New York","America/New_York"),
+              ("Beijing","Asia/Shanghai"),
+              ("Sydney","Australia/Sydney"),
+              ("Delhi","Asia/Kolkata")]
+      return {"times":[{"label":l,"tz":tz,"iso":datetime.now(ZoneInfo(tz)).isoformat()} for l,tz in   cities]}
+
+  @app.post("/metrics/visit")
+  def visit(req: Request):
+      ip = req.headers.get("x-forwarded-for") or req.client.host or "0.0.0.0"
+      ua = req.headers.get("user-agent","?")
+      today = datetime.now(timezone.utc).date().isoformat()
+      fp = f"{today}:{hash((ip,ua))}"
+      if r.setnx(f"fp:{fp}","1"):
+          r.incr("visits:total")
+          r.incr(f"visits:day:{today}")
+          with pg, pg.cursor() as cur:
+              cur.execute("UPDATE site_counters SET total=total+1,updated_at=now() WHERE id=1")
+      return {"ok":True}
+
+  @app.get("/metrics/total")
+  def total():
+      val = r.get("visits:total")
+      if val is None:
+          with pg, pg.cursor() as cur:
+              cur.execute("SELECT total FROM site_counters WHERE id=1")
+              val = cur.fetchone()[0]
+              r.set("visits:total", val)
+      return {"total": int(val)}
+  PY
+   ```
+   iii.
+
+   iiii.
