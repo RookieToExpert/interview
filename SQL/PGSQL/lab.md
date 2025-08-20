@@ -1,4 +1,4 @@
-## 创建数据库
+<img width="572" height="252" alt="image" src="https://github.com/user-attachments/assets/d7362387-e5c1-4b39-be78-0ee57f83d426" />## 创建数据库
 ```pgsqsl
 \pset pager off    -- 禁用分页器，结果一次性输出。
 \timing on         -- 显示每条语句耗时。
@@ -124,13 +124,13 @@ ANALYZE;   -- 参见52
 ## 查询与窗口
 ```pgsql  
 -- 最近7天：下单用户数与订单数
-WITH d AS (SELECT now() - interval '7 days' AS t)     -- 参见53㊵
-SELECT COUNT(DISTINCT o.user_id) AS users_7d,         -- 参见54
+WITH d AS (SELECT now() - interval '7 days' AS t)     -- WITH ... AS (...)（CTE）：给子查询命名复用，提升可读性
+SELECT COUNT(DISTINCT o.user_id) AS users_7d,         -- DISTINCT：去重。
        COUNT(*) AS orders_7d
 FROM orders o, d
 WHERE o.created_at >= d.t;
 # 更简单的写法：
-SELECT COUNT(DISTINCT o.user_id) AS users_7d,         -- 参见54
+SELECT COUNT(DISTINCT o.user_id) AS users_7d,         
        COUNT(*) AS orders_7d
 FROM orders o
 WHERE o.created_at >=now() - interval '7 days';
@@ -138,17 +138,17 @@ WHERE o.created_at >=now() - interval '7 days';
 -- 近30天消费额 Top10
 SELECT u.id, u.email, SUM(o.total) AS amt
 FROM users u
-JOIN orders o ON o.user_id = u.id                     -- 参见55
-WHERE o.created_at >= now() - interval '30 days'      -- 参见㊵
-GROUP BY u.id, u.email                                -- 参见56
-ORDER BY amt DESC                                     -- 参见57
-LIMIT 10;                                             -- 参见58
+JOIN orders o ON o.user_id = u.id                     -- JOIN：表连接。
+WHERE o.status != 'cancelled' AND o.created_at >= now() - interval '30 days'      
+GROUP BY u.id, u.email                                -- GROUP BY：分组聚合。
+ORDER BY amt DESC                                     -- ORDER BY：排序。
+LIMIT 10;                                             -- LIMIT：限制返回行数。
 ```
 -- 窗口：累计消费与排名
 SELECT u.id, u.email,
        SUM(o.total) AS amt,
-       SUM(SUM(o.total)) OVER (ORDER BY SUM(o.total) DESC) AS running_amt,  -- 参见59⑥0
-       RANK() OVER (ORDER BY SUM(o.total) DESC) AS rnk                       -- 参见61
+       SUM(SUM(o.total)) OVER (ORDER BY SUM(o.total) DESC) AS running_amt,  -- 窗口函数 ... OVER(...)：在不折叠行的前提下做排名/累计/移动计算。SUM(...) OVER(...)：窗口累计和。
+       RANK() OVER (ORDER BY SUM(o.total) DESC) AS rnk                       -- RANK()：排名函数（并列会跳号）。  
 FROM users u
 JOIN orders o ON o.user_id=u.id
 GROUP BY u.id, u.email
@@ -157,63 +157,63 @@ LIMIT 20;
 
 -- 每日 GMV 与 7 日移动平均
 WITH d AS (
-  SELECT date_trunc('day', created_at) AS d, SUM(total) AS gmv  -- 参见㊱
+  SELECT date_trunc('day', created_at) AS d, SUM(total) AS gmv  -- date_trunc('unit', ts)：把时间截到指定精度（如月初）。
   FROM orders GROUP BY 1
 )
 SELECT d, gmv,
-       AVG(gmv) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS gmv_ma7  -- 参见59⑥2
+       AVG(gmv) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS gmv_ma7  -- ROWS BETWEEN ...：以“行数”定义窗口范围（如前6行到当前行）。
 FROM d ORDER BY d DESC LIMIT 20;
 
 ## JSONB 实战
 -- 取 JSON 子字段 + 类型转换
 SELECT id,
-       extra->>'channel' AS ch,                 -- 参见㊸
-       (extra->>'vip')::bool AS vip             -- 参见㊸㊹
+       extra->>'channel' AS ch,                 
+       (extra->>'vip')::bool AS vip             
 FROM orders
-WHERE (extra->>'vip')::bool = true              -- 参见㊸㊹
+WHERE (extra->>'vip')::bool = true              
 ORDER BY id DESC LIMIT 5;
 
 -- 局部更新 JSON（不全列覆盖）
 UPDATE orders
 SET extra = jsonb_set(
   extra,                                        -- 原 JSONB
-  '{flags}',                                    -- 路径（顶层key） 参见64
-  jsonb_build_object('reviewed', true),         -- 参见㊾
+  '{flags}',                                    -- 路径（顶层key） JSON 路径 {a,b,0}：表示 a.b[0]。
+  jsonb_build_object('reviewed', true),         -- jsonb_build_object(k,v,...)：构造 JSONB 对象。
   true                                          -- 不存在则创建
 )
-WHERE id IN (SELECT id FROM orders ORDER BY random() LIMIT 100);  -- 参见㊻
+WHERE id IN (SELECT id FROM orders ORDER BY random() LIMIT 100);   --ORDER BY random() 的意思就是：对表里的所有行，给每行生成一个随机数，然后按随机数排序。
 
 -- 验证表达式索引命中
-EXPLAIN ANALYZE                                  -- 参见65
+EXPLAIN ANALYZE                                  -- EXPLAIN ANALYZE：执行并显示真实计划与耗时。
 SELECT id FROM orders
-WHERE extra->>'channel' = 'web'                  -- 参见㊸
-LIMIT 100;                                       -- 参见66
+WHERE extra->>'channel' = 'web'                  
+LIMIT 100;                                       
 
 ## 事物与锁(两窗口操作)
-BEGIN;                                           -- 参见67
-UPDATE products SET price = price WHERE id = 1;  -- 获得该行的行级锁 参见68
+BEGIN;                                           -- BEGIN / COMMIT / ROLLBACK：开启/提交/回滚事务。
+UPDATE products SET price = price WHERE id = 1;  -- 获得该行的行级锁 行级锁：更新某行会持有该行锁，其他事务更新同一行需等待。
 -- （保持不提交）
 
-UPDATE products SET price = price + 1 WHERE id = 1;  -- 会等待上面的行锁释放 参见68
+UPDATE products SET price = price + 1 WHERE id = 1;  -- 会等待上面的行锁释放
 
 -- 查看等待的锁
 SELECT pid, granted, mode, relation::regclass
-FROM pg_locks                                     -- 参见69
+FROM pg_locks                                     pg_locks：系统视图，查看锁与等待状态。
 WHERE NOT granted;
 
 -- 任务队列范式：跳过被锁行
-BEGIN;                                            -- 参见67
+BEGIN;                                            
 SELECT product_id
-FROM order_items
+FROM order_items  
 WHERE product_id=1
-FOR UPDATE SKIP LOCKED;                           -- 参见70
+FOR UPDATE SKIP LOCKED;                           -- FOR UPDATE SKIP LOCKED：锁定选中行并跳过已被锁行（任务队列常用）。
 
-ROLLBACK;                                         -- 参见67
+ROLLBACK;                                         -- BEGIN / COMMIT / ROLLBACK：开启/提交/回滚事务。
 
-COMMIT;                                           -- 参见67
+COMMIT;                                           -- BEGIN / COMMIT / ROLLBACK：开启/提交/回滚事务。
 
-SHOW default_transaction_isolation;               -- 参见71
--- SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;  -- 参见72（可选演示）
+SHOW default_transaction_isolation;               -- default_transaction_isolation：默认隔离级别。
+-- SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;  -- SET TRANSACTION ISOLATION LEVEL：设置当前事务隔离级别。
 
 ## 索引与执行计划
 -- 复合索引（user_id, created_at）
@@ -284,4 +284,20 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA app
 
 SELECT * FROM pg_stat_activity;         -- 查看当前会话/SQL   参见91
 SELECT * FROM pg_locks WHERE NOT granted;  -- 等锁明细        参见69
+
+## 常见系统表格
+| 系统表/视图 | 作用 | 常见字段/参数 |
+|-------------|------|----------------|
+| **pg_stat_activity** | 查看所有会话的执行状态、SQL、等待情况 | `pid` (进程号), `usename` (用户名), `datname` (数据库名), `state` (状态), `query_start` (SQL开始时间), `wait_event` (等待事件), `query` (正在执行的SQL) |
+| **pg_locks** | 当前数据库中的锁信息，排查阻塞/死锁 | `pid` (持锁进程), `locktype` (锁类型：relation/page/tuple), `relation` (表OID), `mode` (锁模式), `granted` (是否已授予) |
+| **pg_stat_user_tables** | 用户表的访问/修改统计信息 | `relname` (表名), `seq_scan` (顺序扫描次数), `idx_scan` (索引扫描次数), `n_tup_ins` (插入行数), `n_tup_upd` (更新行数), `last_vacuum` (最近手工vacuum), `last_autovacuum` (最近自动vacuum) |
+| **pg_stat_user_indexes** | 用户索引的使用统计 | `relname` (表名), `indexrelname` (索引名), `idx_scan` (索引扫描次数), `idx_tup_read` (索引返回条目数) |
+| **pg_statio_user_tables** | 表的 I/O 统计（命中/读盘情况） | `relname` (表名), `heap_blks_read` (读磁盘块), `heap_blks_hit` (缓冲命中块) |
+| **pg_indexes** | 查看表的索引定义 | `schemaname` (schema名), `tablename` (表名), `indexname` (索引名), `indexdef` (索引定义SQL) |
+| **pg_class** | 存放表、索引、序列的元信息 | `relname` (对象名), `relkind` (对象类型: r=table, i=index), `relnamespace` (schema OID), `reltuples` (表估计行数) |
+| **pg_attribute** | 表/索引的列定义 | `attname` (列名), `atttypid` (数据类型OID), `attnotnull` (是否非空), `attnum` (列序号) |
+| **pg_roles** | 数据库角色/用户信息 | `rolname` (角色名), `rolsuper` (是否超级用户), `rolcreatedb` (是否可建库), `rolreplication` (是否复制用户) |
+| **pg_settings** | 当前数据库参数配置，等价 `SHOW` | `name` (参数名), `setting` (值), `unit` (单位), `source` (值来源: default/config/override) |
+| **pg_stat_replication** | 主库上查看从库同步状态 | `pid`, `application_name` (从库名), `state` (流复制状态), `sync_state` (同步/异步), `replay_lag` (延迟) |
+| **pg_stat_progress_vacuum** | VACUUM 进度信息 | `pid`, `datname`, `relid` (表OID), `phase` (阶段), `heap_blks_total/heap_blks_scanned` (进度统计) |
 
