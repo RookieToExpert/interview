@@ -1,5 +1,7 @@
-<img width="572" height="252" alt="image" src="https://github.com/user-attachments/assets/d7362387-e5c1-4b39-be78-0ee57f83d426" />## 创建数据库
-```pgsqsl
+<img width="572" height="252" alt="image" src="https://github.com/user-attachments/assets/d7362387-e5c1-4b39-be78-0ee57f83d426" />
+
+## 创建数据库
+```sql
 \pset pager off    -- 禁用分页器，结果一次性输出。
 \timing on         -- 显示每条语句耗时。
 \x auto            -- 宽表/JSON 自动展开显示。
@@ -11,12 +13,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";  -- 安装扩展（功能插件）
 CREATE EXTENSION IF NOT EXISTS pg_trgm;      
 ```
 ## 创建schema
-```pgsql
+```sql
 CREATE SCHEMA app;                -- 对象命名空间；同名表可在不同 schema 并存。
 SET search_path=app,public;       -- 对象查找顺序；先在 app 找，再到 public。
 ```
 ## 创建表格
-```pgsql
+```sql
 -- 用户表
 CREATE TABLE users(
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- BIGINT:64 位整数（8字节）。GENERATED ... AS IDENTITY：标准自增列（替代 SERIAL）。ALWAYS/BY DEFAULT:是否允许手动赋值（ALWAYS 更严格）。PRIMARY KEY:主键=唯一+非空，并自动建 B-Tree 索引。
@@ -81,7 +83,7 @@ CREATE INDEX ON orders((extra->>'channel'));
 CREATE INDEX ON orders(((extra->>'vip')::bool));      JSON提取->/->>: ->取JSON值；->>取文本；  ::type：把目标值转换成目标类型比如::bool
 ```
 ## 批量造数
-```pgsql
+```sql
 -- 2万用户
 INSERT INTO users(email,name,created_at)
 SELECT 'user'||i||'@ex.com', 'User '||i,
@@ -122,7 +124,7 @@ FROM orders o;
 ANALYZE;   -- 参见52
 ```
 ## 查询与窗口
-```pgsql  
+```sql
 -- 最近7天：下单用户数与订单数
 WITH d AS (SELECT now() - interval '7 days' AS t)     -- WITH ... AS (...)（CTE）：给子查询命名复用，提升可读性
 SELECT COUNT(DISTINCT o.user_id) AS users_7d,         -- DISTINCT：去重。
@@ -144,6 +146,7 @@ GROUP BY u.id, u.email                                -- GROUP BY：分组聚合
 ORDER BY amt DESC                                     -- ORDER BY：排序。
 LIMIT 10;                                             -- LIMIT：限制返回行数。
 ```
+```sql
 -- 窗口：累计消费与排名
 SELECT u.id, u.email,
        SUM(o.total) AS amt,
@@ -163,8 +166,9 @@ WITH d AS (
 SELECT d, gmv,
        AVG(gmv) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS gmv_ma7  -- ROWS BETWEEN ...：以“行数”定义窗口范围（如前6行到当前行）。
 FROM d ORDER BY d DESC LIMIT 20;
-
+```
 ## JSONB 实战
+```sql
 -- 取 JSON 子字段 + 类型转换
 SELECT id,
        extra->>'channel' AS ch,                 
@@ -188,8 +192,10 @@ EXPLAIN ANALYZE                                  -- EXPLAIN ANALYZE：执行并�
 SELECT id FROM orders
 WHERE extra->>'channel' = 'web'                  
 LIMIT 100;                                       
+```
 
 ## 事物与锁(两窗口操作)
+```sql
 BEGIN;                                           -- BEGIN / COMMIT / ROLLBACK：开启/提交/回滚事务。
 UPDATE products SET price = price WHERE id = 1;  -- 获得该行的行级锁 行级锁：更新某行会持有该行锁，其他事务更新同一行需等待。
 -- （保持不提交）
@@ -202,11 +208,11 @@ FROM pg_locks                                     pg_locks：系统视图，查�
 WHERE NOT granted;
 
 -- 任务队列范式：跳过被锁行
-BEGIN;                                            
-SELECT product_id
-FROM order_items  
-WHERE product_id=1
-FOR UPDATE SKIP LOCKED;                           -- FOR UPDATE SKIP LOCKED：锁定选中行并跳过已被锁行（任务队列常用）。
+BEGIN;
+SELECT price 
+FROM products 
+WHERE id=1 
+FOR UPDATE SKIP LOCKED;                            -- FOR UPDATE SKIP LOCKED：锁定选中行并跳过已被锁行（任务队列常用）。
 
 ROLLBACK;                                         -- BEGIN / COMMIT / ROLLBACK：开启/提交/回滚事务。
 
@@ -214,76 +220,85 @@ COMMIT;                                           -- BEGIN / COMMIT / ROLLBACK�
 
 SHOW default_transaction_isolation;               -- default_transaction_isolation：默认隔离级别。
 -- SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;  -- SET TRANSACTION ISOLATION LEVEL：设置当前事务隔离级别。
+```
+(FOR UPDATE SKIP LOCKED会跳过被锁的行，直到锁解开)
+
+![alt text](image.png)
 
 ## 索引与执行计划
+```sql
 -- 复合索引（user_id, created_at）
-CREATE INDEX ON orders(user_id, created_at);      -- 参见73
+CREATE INDEX ON orders(user_id, created_at);      -- 复合索引（多列）：一个索引包含多列，典型“等值+范围+排序”。
 
-EXPLAIN (ANALYZE,BUFFERS,TIMING)                  -- 参见74
+EXPLAIN (ANALYZE,BUFFERS,TIMING)                  -- EXPLAIN (ANALYZE, BUFFERS, TIMING)：显示耗时与缓冲（I/O）信息。
 SELECT * FROM orders
-WHERE user_id = (SELECT id FROM users ORDER BY random() LIMIT 1)  -- 参见㊻
-  AND created_at >= now() - interval '90 days'     -- 参见㊵
-ORDER BY created_at DESC                           -- 参见57
-LIMIT 50;                                          -- 参见58
+WHERE user_id = (SELECT id FROM users ORDER BY random() LIMIT 1)  
+  AND created_at >= now() - interval '90 days'     
+ORDER BY created_at DESC                           
+LIMIT 50;                                          
 
 -- 部分索引：仅针对已付款/已发货
 CREATE INDEX ON orders(created_at)
-WHERE status IN ('paid','shipped');               -- 参见75
+WHERE status IN ('paid','shipped');               -- 部分索引：仅对满足 WHERE 条件的行建索引，体积小、针对性强。
 
 EXPLAIN ANALYZE
 SELECT COUNT(*) FROM orders
 WHERE status IN ('paid','shipped')
-  AND created_at >= now() - interval '30 days';   -- 参见㊵
+  AND created_at >= now() - interval '30 days';   
 
 -- 模糊搜索：trigram + GIN
 CREATE INDEX products_name_trgm
-ON products USING gin (name gin_trgm_ops);        -- 参见76⑦7
+ON products USING gin (name gin_trgm_ops);        -- USING gin：指定 GIN 索引结构（适合数组/全文/三元组等）。gin_trgm_ops：trigram 操作类，支持 ILIKE '%...%' 模糊匹配。
 
 EXPLAIN ANALYZE
 SELECT id,name FROM products
-WHERE name ILIKE '%duct 12%'                      -- 参见78
+WHERE name ILIKE '%duct 12%'                      -- ILIKE：不区分大小写的 LIKE。
 LIMIT 20;
 
 ## 分区裁剪与维护
 EXPLAIN ANALYZE
 SELECT COUNT(*) FROM orders
-WHERE created_at >= date_trunc('month', now())::date;  -- 参见㊱
--- 计划里应看到只扫描当月分区（分区裁剪） 参见79
+WHERE created_at >= date_trunc('month', now())::date;  
+-- 计划里应看到只扫描当月分区（分区裁剪） 分区裁剪：优化器只扫描命中的分区而非全表。
 
 -- 新增下月空分区
 DO $$
-DECLARE d DATE := date_trunc('month', now())::date + interval '1 month';  -- 参见㊱㊵
+DECLARE d DATE := date_trunc('month', now())::date + interval '1 month';  
 BEGIN
   EXECUTE format(
     'CREATE TABLE IF NOT EXISTS orders_%s PARTITION OF orders FOR VALUES FROM (%L) TO (%L);',
-    to_char(d,'YYYYMM'), d, (d + interval '1 month')                       -- 参见㊴㊵
+    to_char(d,'YYYYMM'), d, (d + interval '1 month')                       
   );
 END$$;
+```
 
 ## 权限与最小授权
-CREATE ROLE app_rw LOGIN PASSWORD 'rwpass';   -- 参见80
-CREATE ROLE app_ro LOGIN PASSWORD 'ropass';   -- 参见80
+```sql
+CREATE ROLE app_rw LOGIN PASSWORD 'rwpass';   -- CREATE ROLE ... LOGIN PASSWORD：创建可登录角色（用户）。
+CREATE ROLE app_ro LOGIN PASSWORD 'ropass';  
 
-GRANT USAGE ON SCHEMA app TO app_ro, app_rw; -- 参见81
-GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_ro;                      -- 参见82
-GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA app TO app_rw; -- 参见82
+GRANT USAGE ON SCHEMA app TO app_ro, app_rw; -- GRANT USAGE ON SCHEMA：允许在该 schema 下“可见/可用”对象（不含读写表数据）。
+GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_ro;                      -- GRANT SELECT/INSERT/UPDATE/DELETE：授予表级读写权限。
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA app TO app_rw; 
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA app                                   -- 参见83
+ALTER DEFAULT PRIVILEGES IN SCHEMA app                                   -- ALTER DEFAULT PRIVILEGES：为“将来新建对象”设置默认授权。
   GRANT SELECT ON TABLES TO app_ro;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
   GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO app_rw;
-
+```
 ## 常用辅助命令
-\dn            -- 列出所有 schema                         参见90
-\dt app.*      -- 列出 app 下所有表                        参见90
-\d+ app.orders -- 查看表结构与存储信息                     参见90
-\di+           -- 列出索引                                 参见90
-\dx            -- 列出扩展                                 参见90
-\conninfo      -- 当前连接信息                             参见90
+```sql
+\dn            -- 列出所有 schema                         
+\dt app.*      -- 列出 app 下所有表                        
+\d+ app.orders -- 查看表结构与存储信息                     
+\di+           -- 列出索引                                 
+\dx            -- 列出扩展                                 
+\conninfo      -- 当前连接信息                             
 
-SELECT * FROM pg_stat_activity;         -- 查看当前会话/SQL   参见91
-SELECT * FROM pg_locks WHERE NOT granted;  -- 等锁明细        参见69
+SELECT * FROM pg_stat_activity;         -- 查看当前会话/SQL  
+SELECT * FROM pg_locks WHERE NOT granted;  -- 等锁明细
+```
 
 ## 常见系统表格
 | 系统表/视图 | 作用 | 常见字段/参数 |
