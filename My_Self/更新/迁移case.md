@@ -20,9 +20,31 @@
 
 ## 遇到的问题：
 #### 网络：
+1. 迁移网络遇到的问题：
 当时一开始卡在私网复制出了问题，一开始是azure终端的private endpoint不联通，客户一直出问题的原因是他们在dns中加了一个forwarder到azure的public dns ip 168.63.129.16，然后一直还是nslookup出问题，当时我们因为迁移窗口短，所以是直接到host file上加映射IP和地址解决的，
+2. 迁移后，IP发生改变，先前使用IP互相调用的应用会失联，怎么办？
+    #### 情况一：用户本地可以将IP硬编码统一改成域名：
+    1. 用FQDN取代硬编码，**本地DNS**服务器做域名解析**指向本地IP**。
+    2. 在云端做好Azure private DNS Zone，并打通云端DNS resolver和本地的网络，在本地DNS做conditional forwarded。
+    3. 降低TTL到60-300秒，预热缓存。
+    4. 迁移日，把域名的权威解析/记录切换成云端IP/Private endpoint；客户端随TTL过期后自动指向新后端。
+    #### 情况二：本地全面改代码代价太大：
+    ##### A. NAT转换
+    1. 本地放置一台NAT/防火墙设备(F5、Palo等等)，把目的地为旧IP流量引流到NAT，然后通过NAT做DNAT规则，比如旧IP:端口号指向新IP:端口号。
+    2. 为避免回程不对称，对所有DNAT规则启用SNAT，把源改成NAT侧地址。
+    3. 云端确保有Expressroute/VPN，VNet到本地的路由包含本地网段，允许回程到NAT的地址。
+    ##### B. 反向代理/网关：
+    1. 本地部署一台网关/代理(Nginx/F5)，对外仍监听旧IP/端口，转发到云端后端。
+    2. 在代理上监听旧IP：端口并且后端指向新IP：端口。
+    3. 云端部署ILB，将迁移上来的应用放入后端。
+
+#### 割接问题：
+1. 简单一点，看客户需要做蓝绿，还是灰度。
+2. 蓝绿则就是比较简单，比如拿azure举例子，在云端准备好一个公网入口的形态，可以是Azure Front door(全球加速 + 权重/健康探测 + WAF，推荐),Azure application gateway(区域入口，四层配合公有 SLB)或者就是简单的公有load balancer(最轻，但没有 L7 能力；灰度靠上层或 Traffic Manager)。
+3. 拿AFD举例子，在AFD准备两个入口，一个是你本地的公网出口(可能是一个反代理服务器)的公网地址，一个是你的云上公网地址，割切时，将权威DNS的对外域名改成CNAME指向AFD的endpoint，之后你就可以在AFD上切换优先级，把优先级改成云上公网地址。但在这之前你还要在AFD上做一些校验和配置等等，AFD需要确保这个域名是你的。
 #### disk churn：
 然后当时解决了PE解析的问题以后，最多的问题还是disk churn/iops超了限制，那么我们就是要去切换成high churn模式，把缓存数据的cache storage account改成premium block blob，这样单机可提升到100MB/s，当然还是有部分VM尤其是数据库本地磁盘churn太高了，我们当时就把复制压力分散到多个存储账户，避免单个账户的入口限速，当然还有一些磁盘就是高写入，那我们只能先去排除掉这些高churn磁盘，然后再做迁移，事后再去把剩余几个高churn的磁盘去单独做数据传输，除了单个disk churn的问题，还有就是客户客户复制超过300台VM，超出了单个appliance支持的上限，需要scale out appliance。
 #### 宽带压力：
 就是并行复制大量磁盘时，本地带宽压力比较大，所以也是分批去进行复制，并且也是改了VMware appliance上的限流策略，白天的时候限流100Mb/s，晚上放开,Hyper-V是通过C:\Program Files\Microsoft Azure Recovery Services Agent\bin\wabadmin.msc去调整限速策略。
+
 
