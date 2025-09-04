@@ -6,9 +6,8 @@ them optimize how they use not onbly these essential services that our team is f
 
 Also, working with customers in this role has really helped me improve my communication skills. Beyond just solving technical problems, I’ve become really good at understanding the customer’s core needs and approaching solutions from their perspective.
 
-你好！首先，非常感谢 XXX 和 XXX 抽出时间面试我。
-我叫 Ray，毕业于弗吉尼亚理工大学（Virginia Tech），主修数学，辅修计算机科学。毕业后，我加入微软 Azure 担任支持工程师，所在团队专注于 Azure Backup、Azure Site Recovery 以及 Azure Migration 等服务。
+各位面试官好，非常感谢今天给我这个机会。我叫XXX，本科毕业于XXX大学，主修数学。毕业前后，我加入**微软云担任云计算技术支持工程师**。
+在这期间，我所在的团队主要聚焦于 Azure **数据保护与迁移方向**，那我们团队也叫 ABRS（Azure Backup, Recovery, and Migration Services）。我主要负责的是 **IaaS 与 PaaS 层面的备份**、**容灾和迁移场景**，包括虚拟机、数据库、存储，以及部分混合云环境下的数据保护。我的工作重点不仅在于**帮助客户解决问题**，更在于通过**深入分析**提供**稳定可靠的解决方案**，确保客户的关键业务能够**安全、高效、连续地运行**。
+在具体项目中，我积累了丰富的一线经验，例如协助客户设计从**VM级到组件级的迁移方案**、处理**数据库增量同步与一致性验证**，以及通过**备份校验和容灾演练**来保障业务**连续性**。同时，我还会为客户提供**最佳实践和优化建议**，帮助他们提升使用 Azure 产品的**效率与稳定性**。
 
-在目前的岗位中，我为使用 Azure 进行备份、灾难恢复和迁移的企业级与高级客户提供技术支持与故障排查。我的目标是通过及时解决问题，并帮助客户优化这些关键服务的使用（不仅包括我们团队所负责的服务，也包括 Azure Virtual Machines、Azure Virtual Network、Azure Storage 等其他 Azure 服务），以确保其环境稳定顺畅地运行。
-
-此外，这份工作中与客户的持续合作也显著提升了我的沟通能力。我不仅关注技术问题本身，更善于理解客户的核心诉求，并从客户的视角出发制定与推进解决方案。
+除了技术支持，我也非常重视**沟通与协作能力**。在工作中，我经常需要与**客户的运维团队**、**SI 合作伙伴**以及微软**内部产品团队**进行跨区域沟通，推动问题解决与方案落地。这让我能够更好地站在客户视角理解需求，并推动方案实施。
