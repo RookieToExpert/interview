@@ -84,6 +84,69 @@ VMware和Hyper-V是通过基于VMware的CBT，Hyper-V侧用HRL日志跟踪去然
     - 运维：监控迁移后性能指标，确保 SLA 达标。
 测试迁移完成之后，会进入正式迁移割接阶段。通过使用入口frontdoor，逐渐放流至云端web应用，数据库任然指向本地数据库，此时保持专线打通，验证云端前端应用运行正常，逐步放流至100%时，暂时保留本地前端应用，作为回滚备份方案。此时对于数据库，暂时停止本地数据库写入操作，进行最终增量复制，割接的总量数据约为50-100GB左右，专线带宽为500Mbps，总停机窗口耗时为25分钟左右，停机期间，通过DNS切换指向云端数据库，确保割接完成后，应用能立马上线，并反向同步云端数据库至本地数据库，实现将本地数据库作为暂时的容灾区域，并作为回滚方案。(确认 生产 Spoke → Firewall → 云端 SQL Private Endpoint 的出站端口（1433/TCP 或相应）已放通，否则割接时 DMS/应用访问可能失败。)
 
+## 遇到的问题：
+#### 数据库迁移：
+1. Oracle转到azure db for PGsql：
+    1. 版本不兼容， 老版本 Oracle (Oracle 11gR2 (11.2.0.4))的数据类型、函数在 PG 中没有对应实现。
+    2. SDK接口不一致，应用层调用 JDBC/ODBC 时要替换 driver。
+    3. 数据格式不同，Oracle 的 NUMBER、DATE、CLOB 在 PG 中需要映射，部分触发器（如 BEFORE INSERT 级别）迁移后逻辑冲突。
+
+- 解决方案：
+    - 使用 Azure DMS + Schema Conversion Tool (SCT) 进行自动化迁移评估和转换，识别 70% 自动可转化，30% 需人工改造。
+    - 制定 数据类型映射表统一替换规则（NUMBER → NUMERIC，CLOB → TEXT）。
+    - 应用 JDBC 驱动替换为 org.postgresql.Driver，.NET 项目替换 Npgsql。
+    - 通过 读写分离 + 索引优化 弥补 PG 在性能上的不足。
+    - 建立 双写/回切机制（例如 Oracle 作为主库，PG 做增量同步，验证后再切换）。
+    - 建立 双活同步：Oracle 作为主库，PG 增量同步（通过 GoldenGate → Kafka → PG），验证后再平滑切换。
+
+2. SAP HANA官方工具不支持：
+    1. Azure DMS 不支持 SAP HANA，HANA 对硬件依赖高（需要认证的 VM SKU / 专用裸机），迁移停机窗口难以接受（ERP 系统必须 7x24）。
+    2. HANA license 绑定硬件，需要与 SAP 协调。
+    3. 数据量极大（TB~几十 TB），全量导入导出不可行。
+
+- 解决方案：
+    1. 使用 SAP HANA System Replication (HSR)，先做全量复制，再保持增量实时同步，最终切换时只需停机几分钟。
+    2. 对于版本升级场景，使用 SAP SUM with DMO（边迁移边升级）。
+    3. 在 Azure 上部署时选择 认证 VM（M 系列、Mv2）或 HANA Large Instance，确保性能。
+    4. 提前和 SAP 确认 license 转移方式。
+    5. 使用 ANF (Azure NetApp Files) 或高速专线传输（ExpressRoute）来减少数据迁移时间。
+
+3. 安全与合规：
+    1. 云端启用数据库自带TDE加密，对静态数据进一步加密。
+    2. 要求所有应用通过 SSL/TLS 连接数据库，拒绝明文连接。
+    3. 将相关TDE加密密钥，传输层加密文件，应用访问凭证包括用户名密码等统一管理交由 Azure Key Vault，满足密钥轮换、审计要求。
+    4. 在云端数据库(内置 审计日志导出)上启用 审计日志 (Audit Logs)，记录所有用户的登录、查询、DDL、DML 操作。将日志集中导出到 Azure Monitor / Log Analytics 满足企业合规（SOX、ISO、PCI DSS 等）。
+    5. 利用 Azure Policy + Defender for SQL 自动生成合规性检查报告（例如是否启用了加密、是否存在高危配置）。定期导出合规状态，作为内审和外部监管的审计凭据。
+
+- 解决方案：启用 TDE（透明数据加密）+ Azure Key Vault 做密钥管理。
+#### 网络：
+1. 迁移网络遇到的问题：
+当时一开始卡在私网复制出了问题，一开始是azure终端的private endpoint不联通，客户一直出问题的原因是他们在dns中加了一个forwarder到azure的public dns ip 168.63.129.16，然后一直还是nslookup出问题，当时我们因为迁移窗口短，所以是直接到host file上加映射IP和地址解决的，
+2. 迁移后，IP发生改变，先前使用IP互相调用的应用会失联，怎么办？
+    #### 情况一：用户本地可以将IP硬编码统一改成域名：
+    1. 用FQDN取代硬编码，**本地DNS**服务器做域名解析**指向本地IP**。
+    2. 在云端做好Azure private DNS Zone，并打通云端DNS resolver和本地的网络，在本地DNS做conditional forwarded。
+    3. 降低TTL到60-300秒，预热缓存。
+    4. 迁移日，把域名的权威解析/记录切换成云端IP/Private endpoint；客户端随TTL过期后自动指向新后端。
+    #### 情况二：本地全面改代码代价太大：
+    ##### A. NAT转换
+    1. 本地放置一台NAT/防火墙设备(F5、Palo等等)，把目的地为旧IP流量引流到NAT，然后通过NAT做DNAT规则，比如旧IP:端口号指向新IP:端口号。
+    2. 为避免回程不对称，对所有DNAT规则启用SNAT，把源改成NAT侧地址。
+    3. 云端确保有Expressroute/VPN，VNet到本地的路由包含本地网段，允许回程到NAT的地址。
+    ##### B. 反向代理/网关：
+    1. 本地部署一台网关/代理(Nginx/F5)，对外仍监听旧IP/端口，转发到云端后端。
+    2. 在代理上监听旧IP：端口并且后端指向新IP：端口。
+    3. 云端部署ILB，将迁移上来的应用放入后端。
+
+#### 割接问题：
+1. 简单一点，看客户需要做蓝绿，还是灰度。
+2. 蓝绿则就是比较简单，比如拿azure举例子，在云端准备好一个公网入口的形态，可以是Azure Front door(全球加速 + 权重/健康探测 + WAF，推荐),Azure application gateway(区域入口，四层配合公有 SLB)或者就是简单的公有load balancer(最轻，但没有 L7 能力；灰度靠上层或 Traffic Manager)。
+3. 拿AFD举例子，在AFD准备两个入口，一个是你本地的公网出口(可能是一个反代理服务器)的公网地址，一个是你的云上公网地址，割切时，将权威DNS的对外域名改成CNAME指向AFD的endpoint，之后你就可以在AFD上切换优先级，把优先级改成云上公网地址。但在这之前你还要在AFD上做一些校验和配置等等，AFD需要确保这个域名是你的。
+#### disk churn：
+然后当时解决了PE解析的问题以后，最多的问题还是disk churn/iops超了限制，那么我们就是要去切换成high churn模式，把缓存数据的cache storage account改成premium block blob，这样单机可提升到100MB/s，当然还是有部分VM尤其是数据库本地磁盘churn太高了，我们当时就把复制压力分散到多个存储账户，避免单个账户的入口限速，当然还有一些磁盘就是高写入，那我们只能先去排除掉这些高churn磁盘，然后再做迁移，事后再去把剩余几个高churn的磁盘去单独做数据传输，除了单个disk churn的问题，还有就是客户客户复制超过300台VM，超出了单个appliance支持的上限，需要scale out appliance。
+#### 宽带压力：
+就是并行复制大量磁盘时，本地带宽压力比较大，所以也是分批去进行复制，并且也是改了VMware appliance上的限流策略，白天的时候限流100Mb/s，晚上放开,Hyper-V是通过C:\Program Files\Microsoft Azure Recovery Services Agent\bin\wabadmin.msc去调整限速策略。
+
 监控与回退：
 
 当然，过程中肯定不会像我上面说的那么流畅，我们肯定是遇到了非常多大大小小的问题，因为时间关系，我就挑其中我印象比较深刻的一到两个问题来回答。第一个就是客户他们有部分比较老的应用，底层代码是通过硬编码基于IP通信和互相调用，但是之后客户本地和云端是要通过专线打通，那么云端IP和本地IP网段肯定是不能overlap重合的，此时面临的问题就是虚机上云后这个IP发生变化了，那代码中还在去尝试调用旧IP，肯定就会出现调用失败的情况。那我们当下，基于之前迁移案例经验，给到他们开发团队的建议是使用FQDN，域名的方式去替代硬编码。那客户这边是不同意的，他们不希望在迁移前后去对本地做大规模的改造，尤其是在生产环境中。所以我们当下给到另一个方案，就是通过本地防火墙中设置一个DNAT和SNAT规则，将旧IP指向云端新IP，并通过修改路由表将虚机下一跳到防火墙，这一步也需要确保本地防火墙可以和云端内部负载均衡器之前通过专线能互相访问。确保客户完成迁移之后，应用还是能通过旧IP去进行交流。那么这个其实只是也只是一个现阶段为了保证迁移后应用能正常运行的临时方案，未来客户上云，还是建议他们去把他的底层代码使用FQDN替换IP。
@@ -120,6 +183,40 @@ VMware和Hyper-V是通过基于VMware的CBT，Hyper-V侧用HRL日志跟踪去然
 关于hyper-V,就是基于Hyper-V replica去追踪每次磁盘的变化数据，并记录到log files(hrl文件)，这个log文件与磁盘是在同一个文件夹当中，每个磁盘都会有一个关联的hrl文件，会发送到云端的storage account，为每次增量备份去做一个追踪。
 
 ## 遇到的问题：
+#### 数据库迁移：
+1. Oracle转到azure db for PGsql：
+    1. 版本不兼容， 老版本 Oracle (Oracle 11gR2 (11.2.0.4))的数据类型、函数在 PG 中没有对应实现。
+    2. SDK接口不一致，应用层调用 JDBC/ODBC 时要替换 driver。
+    3. 数据格式不同，Oracle 的 NUMBER、DATE、CLOB 在 PG 中需要映射，部分触发器（如 BEFORE INSERT 级别）迁移后逻辑冲突。
+
+- 解决方案：
+    - 使用 Azure DMS + Schema Conversion Tool (SCT) 进行自动化迁移评估和转换，识别 70% 自动可转化，30% 需人工改造。
+    - 制定 数据类型映射表统一替换规则（NUMBER → NUMERIC，CLOB → TEXT）。
+    - 应用 JDBC 驱动替换为 org.postgresql.Driver，.NET 项目替换 Npgsql。
+    - 通过 读写分离 + 索引优化 弥补 PG 在性能上的不足。
+    - 建立 双写/回切机制（例如 Oracle 作为主库，PG 做增量同步，验证后再切换）。
+    - 建立 双活同步：Oracle 作为主库，PG 增量同步（通过 GoldenGate → Kafka → PG），验证后再平滑切换。
+
+2. SAP HANA官方工具不支持：
+    1. Azure DMS 不支持 SAP HANA，HANA 对硬件依赖高（需要认证的 VM SKU / 专用裸机），迁移停机窗口难以接受（ERP 系统必须 7x24）。
+    2. HANA license 绑定硬件，需要与 SAP 协调。
+    3. 数据量极大（TB~几十 TB），全量导入导出不可行。
+
+- 解决方案：
+    1. 使用 SAP HANA System Replication (HSR)，先做全量复制，再保持增量实时同步，最终切换时只需停机几分钟。
+    2. 对于版本升级场景，使用 SAP SUM with DMO（边迁移边升级）。
+    3. 在 Azure 上部署时选择 认证 VM（M 系列、Mv2）或 HANA Large Instance，确保性能。
+    4. 提前和 SAP 确认 license 转移方式。
+    5. 使用 ANF (Azure NetApp Files) 或高速专线传输（ExpressRoute）来减少数据迁移时间。
+
+3. 安全与合规：
+    1. 云端启用数据库自带TDE加密，对静态数据进一步加密。
+    2. 要求所有应用通过 SSL/TLS 连接数据库，拒绝明文连接。
+    3. 将相关TDE加密密钥，传输层加密文件，应用访问凭证包括用户名密码等统一管理交由 Azure Key Vault，满足密钥轮换、审计要求。
+    4. 在云端数据库(内置 审计日志导出)上启用 审计日志 (Audit Logs)，记录所有用户的登录、查询、DDL、DML 操作。将日志集中导出到 Azure Monitor / Log Analytics 满足企业合规（SOX、ISO、PCI DSS 等）。
+    5. 利用 Azure Policy + Defender for SQL 自动生成合规性检查报告（例如是否启用了加密、是否存在高危配置）。定期导出合规状态，作为内审和外部监管的审计凭据。
+
+- 解决方案：启用 TDE（透明数据加密）+ Azure Key Vault 做密钥管理。
 #### 网络：
 1. 迁移网络遇到的问题：
 当时一开始卡在私网复制出了问题，一开始是azure终端的private endpoint不联通，客户一直出问题的原因是他们在dns中加了一个forwarder到azure的public dns ip 168.63.129.16，然后一直还是nslookup出问题，当时我们因为迁移窗口短，所以是直接到host file上加映射IP和地址解决的，
