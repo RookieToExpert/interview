@@ -1,3 +1,78 @@
+- 写一个查看nginx QPS的脚本
+    - 查看最近1秒
+    ```bash
+    #!/bin/bash
+
+    # Nginx access.log 路径
+    LOG_FILE="/var/log/nginx/access.log"
+
+    # 统计的时间区间（最近 1 秒）
+    CURRENT_TIME=$(date +"%d/%b/%Y:%H:%M:%S")
+
+    # 使用 awk 提取日志中这一秒的请求数
+    QPS=$(grep "$CURRENT_TIME" $LOG_FILE | wc -l)
+
+    echo "[$CURRENT_TIME] QPS: $QPS"
+    ```
+
+    - 查看过去一分钟平均QPS
+    ```bash
+    #!/bin/bash
+    # Nginx access.log 路径
+    LOG_FILE="/var/log/nginx/access.log"
+
+    # 当前时间和一分钟前的时间（分钟粒度）
+    CURRENT_MIN=$(date +"%d/%b/%Y:%H:%M")
+    PREV_MIN=$(date -d "1 minute ago" +"%d/%b/%Y:%H:%M")
+
+    # 从日志里提取过去 60 秒的请求数
+    REQ_COUNT=$(awk -v curr="$CURRENT_MIN" -v prev="$PREV_MIN" '
+    $0 ~ curr || $0 ~ prev {count++} END {print count}' $LOG_FILE)
+
+    # 平均 QPS（请求数 / 60 秒）
+    if [ -z "$REQ_COUNT" ]; then
+      REQ_COUNT=0
+    fi
+
+    QPS=$((REQ_COUNT / 60))
+
+    echo "Average QPS in last 1 min: $QPS (Total Requests: $REQ_COUNT)"
+    ```
+
+- 查看nginx某一天某一个特定接口出现状态码是500的次数的shell脚本
+    ```bash
+    #!/bin/bash
+    # 假设日志文件路径
+    LOGFILE="/var/log/nginx/access.log"
+    # 假设要统计的接口
+    API="xxxx"
+    # 日期
+    DATE="08/Sep/2025"
+
+    echo "Counting 500 errors for $API ..."
+    grep "$DATE" $LOGFILE | grep "/api/v1/$API" | grep " 500 " | wc -l
+    ```
+    或：
+    ```bash
+    #!/bin/bash
+    # 假设日志文件路径
+    LOGFILE="/var/log/nginx/access.log"
+    # 假设要统计的接口
+    API="/api/login"
+
+    echo "Counting 500 errors for $API ..."
+    grep "08/Sep/2025" $LOGFILE | grep "$API" | awk '$9 == 500 {count++} END {print count+0}'
+    ```
+
+- 查看nginx访问量做高的10个IP
+    ```bash
+    #!/bin/bash
+    # 假设 Nginx 日志路径
+    LOGFILE="/var/log/nginx/access.log"
+
+    echo "Top 10 IP addresses by request count:"
+    awk '{print $1}' $LOGFILE | sort | uniq -c | sort -nr | head -10
+    ```
 1. 写过什么shell脚本？
 
     **答案**:
