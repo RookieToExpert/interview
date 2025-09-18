@@ -13,7 +13,7 @@ api变成了**producer**传递"快递"也就是**event**给kafaka，kafaka就像
 
 ![alt text](image-2.png)
 
-- event：包含一对键值，key和value，以及timestamp和一些metadata：
+- event：包含一对键值，key和value，以及timestamp和一些metadata，每一个event会有一个唯一的序号叫做offset用来标示event的位置，consumer通过offset来跟踪已消费的事件，确保不会重复/漏消费：
 
     ![alt text](image-1.png)
 
