@@ -156,7 +156,7 @@ node consumer.js
 
 ## 创建三个broker的kafka集群
 
-![alt text](image-13.png)
+![alt text](./image/image-13.png)
 
 ```bash
 # 创建docker网络
@@ -291,7 +291,7 @@ networks:
 docker compose -f docker-compose.yml up -d
 ```
 
-![alt text](image-14.png)
+![alt text](./image/image-14.png)
 
 ```bash
 # replia表示主题的副本数，partitions表示分区数
