@@ -112,21 +112,23 @@
 ![解读](image-33.png)
 
 2. 查看监听的网络服务：
-`netstat -ntlp`：查看tcp端口
+`ss -ntlp`(-n → 不解析域名，直接显示 IP:Port,-l → 只显示监听（LISTEN）状态,-p → 显示占用进程)：查看tcp端口
 
-![netstat -ntlp](image-21.png)
+<img width="1919" height="279" alt="image" src="https://github.com/user-attachments/assets/e2c25c02-0490-4ece-b732-36556da6c80c" />
 
-![解读](image-34.png)
+<img width="997" height="559" alt="image" src="https://github.com/user-attachments/assets/da99d102-460c-45fe-9702-b68a702f8ac7" />
 
-`netstat -nulp`：查看udp端口
+`ss -nulp`：查看udp端口
 
-![netstat -nulp](image-20.png)
+<img width="1838" height="166" alt="image" src="https://github.com/user-attachments/assets/4f07ebd2-d700-4e35-b551-5ebc2bdade54" />
 
-`netstat -nxlp`：查看UNIX域套接词
+<img width="970" height="586" alt="image" src="https://github.com/user-attachments/assets/54625aa3-f8ab-4df6-b217-7c1133ed4601" />
 
-![netstat -nxlp](image-22.png)
+`ss -nxlp`：查看UNIX域套接词
 
-![解读](image-35.png)
+<img width="1776" height="535" alt="image" src="https://github.com/user-attachments/assets/57241399-b016-4cc9-ae6f-cb0d38094be0" />
+
+<img width="1061" height="600" alt="image" src="https://github.com/user-attachments/assets/45991c9e-489b-4718-a3b5-8a6c9339bb13" />
 
 3. CPU和内存使用情况：
 > 注意以下问题：
