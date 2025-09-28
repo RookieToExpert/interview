@@ -146,6 +146,8 @@
 
 ![解读](image-37.png)
 
+![解读2](image-43.png)
+
 `htop` 可视化的htop(top)
 
 ![alt text](image-19.png)
@@ -192,59 +194,67 @@
 ![网关直连路由解读](image-42.png)
 
 5. I/O 性能：
-`iostat -kx 2`
-`vmstat 2 10`
-`mpstat 2 10`
-`dstat --top-io --top-bio` 
-1. CPU:
-```bash
-# uptime，查看平均负载
-ubuntu@ip-172-31-40-134:~$ uptime
- 05:39:21 up 4 days, 17:58,  1 user,  load average: 0.00, 0.00, 0.00
+> 注意以下问题：
+> 1. 检查服务器磁盘是否已满？
+> 2. CPU被谁占用了：系统进程？用户进程？虚拟机？
+> 3. dstat我的最爱，用它能看到谁在运行IO，是不是MySQL吃掉了所有系统资源？还是你的PHP进程？
+`iostat -kx 2`定位磁盘性能瓶颈：表示每隔 2 秒刷新一次数据
 
-# vmstat，查看系统范围内的cpu平均负载
-ubuntu@ip-172-31-40-134:~$ vmstat 1
-procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
- r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
- 2  0      0  84392  28100 615480    0    0     8    11   80    0  0  0 86  0 14  0
- 0  0      0  84392  28100 615484    0    0     0     0   93   68  0  0 100  0  0  0
- 0  0      0  84392  28100 615484    0    0     0     0   78   62  0  0 100  0  0  0
- 0  0      0  84392  28100 615484    0    0     0     0   88   70  0  0 100  0  0  0
- 0  0      0  84392  28100 615484    0    0     0     0   70   59  0  0 100  0  0  0
+![alt text](image-44.png)
 
-# mpstat，查看所有CPU核信息
-ubuntu@ip-172-31-40-134:~$ mpstat -P ALL 1
-Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+![CPU解读](image-45.png)
 
-05:42:35     CPU    %usr   %nice    %sys %iowait    %irq   %soft  %steal  %guest  %gnice   %idle
-05:42:36     all    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00
-05:42:36       0    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00
-```
+![设备部分，块设备I/O](image-46.png)
 
+`vmstat 2 10`初步判断瓶颈方向：
 
-#sar,查看cpu信息
-ubuntu@ip-172-31-40-134:~$ sar -u
-Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+![alt text](image-47.png)
 
-00:00:29        CPU     %user     %nice   %system   %iowait    %steal     %idle
-00:10:47        all      0.06      0.00      0.05      0.02      0.01     99.85
-00:20:39        all      0.05      0.00      0.04      0.01      0.01     99.89
-00:30:47        all      0.04      0.00      0.04      0.01      0.01     99.90
-00:40:47        all      0.07      0.00      0.05      0.01      0.01     99.86
+![解读](image-50.png)
 
-# pidstat, 每个进程cpu用量分解
-ubuntu@ip-172-31-40-134:~$ pidstat -u 1 -p 1
-Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+![解读](image-51.png)
 
-05:44:39      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
-05:44:40        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
-05:44:41        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
-05:44:42        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
+`mpstat 2 10`分析 CPU 使用模式：显示系统的整体运行情况，包括进程、内存、交换分区、IO、系统中断、上下文切换、CPU 使用情况等
 
-# perf，跟踪进程内函数级别cpu使用量
+![alt text](image-48.png)
 
+![截图](image-52.png)
 
+`dstat --top-io --top-bio`快速找出“谁在吃资源”：
 
+![alt text](image-49.png)
+
+![截图](image-53.png)
+
+四个命令的区别：
+
+![alt text](image-54.png)
+
+6. 挂载点和文件系统：
+> 思考以下问题：
+> 1. 一共挂载了多少文件系统？
+> 2. 有没有某个服务的专用文件系统？比如MySQL
+> 3. 文件系统的挂载选项是什么：noatime?default?有没有文件系统被重新挂载成只读模式了？
+> 4. 磁盘空间还是否有剩余？
+> 5. 是否有大文件被删除但没被清空？
+> 6. 如果磁盘空间有问题，你是否会还有空间来扩展一个分区？
+`mount`:
+
+![alt text](image-55.png)
+
+![解读](image-58.png)
+
+`cat /etc/fstab`:
+
+![alt text](image-56.png)
+
+![解读](image-59.png)
+
+`df -h`
+
+![alt text](image-57.png)
+
+![解读](image-60.png)
 
 ## kubernetes排查思路
 **重要组件**：
