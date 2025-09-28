@@ -12,7 +12,7 @@
 
 #### 技术板块(迁移时high churn issue)
 #### 性能
-**S**：之前对接过一个客户，因本地数据中心到期，需通过 Azure migrate 工具以 lift-and-shift 方式，将几十台服务器迁移至云端 Azure VM。我们作为技术团队负责前期链路搭建顺畅，然而在增量备份阶段，有几台 MySQL 服务器数据同步失败，云端报错 “High churn issue limit”，提示磁盘 IO 超限。
+**S**：之前对接过一个客户，因本地数据中心到期，希望将本地核心业务迁移至云端，整体数据中心的虚机整体采用Azure migrate工具进行平迁至Azure VM，通过site-to-site VPN打通本地和云端网络，云端创建private endpoint，在业务低峰期通过全量+增量备份进行迁移任务。我们作为技术团队负责搭建前期的迁移链路，包括在源端服务器上配置agent，将agent注册至云端保管库并启用agent，建立本地appliance作为迁移任务的中转服务器，一切都正常进行，但是在增量备份阶段，有几台 MySQL 服务器数据同步失败，云端报错 “High churn issue limit”，提示云端磁盘接受的磁盘IO速率过载。
 
 **T**：作为技术对接工程师，核心任务是找到具体数据同步出错的根因，并且给出客户可接受的一个解决方案。
 
@@ -33,7 +33,7 @@
 
 - 但客户拒绝升级，我没有僵持，我是想到我们内部 DMS 可单独迁移数据库，且适配高 IO 场景。虽然我们并不负责DMS的产品，但我立刻联系 DMS 团队的TA，同步客户的 “MySQL 5.7、80GB 数据、停机＜15 分钟” 需求，拉通三方会议：DMS 团队设计 “binlog 实时同步 + 增量切换” 方案。沟通时，我用成本表说服客户：DMS迁移相比服务器迁移，中间不需要去建立多余的中转资源；且长期用 paas的DB自带的高可用、备份及底层的运维从长远来看是能减少更多的成本。同时承诺全程盯测试和迁移，消除他的顾虑。
 
-**R**：最终客户选择通过DMS的方式去迁移，所有数据库服务器迁移成功，数据零丢失，停机页控制在分钟级，从长远来看客户的如果使用paas sql的成本肯定也会更低。客户非常满意，并且后续开case还一直指名要我去对接。
+**R**：最终客户选择通过DMS的方式去迁移，所有数据库服务器迁移成功，数据零丢失，停机也控制在分钟级，从长远来看客户的如果使用paas sql的成本肯定也会更低。客户非常满意，并且后续开case还一直指名要我去对接。
 
 
 #### 网络
@@ -89,6 +89,161 @@
 
 **R**：
 #### landing架构
+
+
+## linux排查思路
+1. 相关进程：
+`pstree -a`：可以看到正在运行的进程及相关用户：
+
+![pstree -a](image-17.png)
+
+![解读](image-31.png)
+
+`ps aux`:
+
+![ps aux](image-18.png)
+
+![解读](image-32.png)
+
+`htop` 可视化的htop(top)
+
+![htop](image-19.png)
+
+![解读](image-33.png)
+
+2. 查看监听的网络服务：
+`netstat -ntlp`：查看tcp端口
+
+![netstat -ntlp](image-21.png)
+
+![解读](image-34.png)
+
+`netstat -nulp`：查看udp端口
+
+![netstat -nulp](image-20.png)
+
+`netstat -nxlp`：查看UNIX域套接词
+
+![netstat -nxlp](image-22.png)
+
+![解读](image-35.png)
+
+3. CPU和内存使用情况：
+> 注意以下问题：
+> 1. 还有空余内存吗？服务器是否正在内存和硬盘之间进行swap？
+> 2. 还有剩余CPU吗？服务器是几核？是否有某些cpu核负载过多了？
+> 3. 服务器最大的负载来自什么地方？平均负载是多少？
+
+`free -m`：查看还剩多少内存 
+
+![内存](image-23.png)
+
+![解读](image-36.png)
+
+`uptime`：查看平均负载
+
+![负载](image-24.png)
+
+![解读](image-37.png)
+
+`htop` 可视化的htop(top)
+
+![alt text](image-19.png)
+
+4. 查看硬件：
+> 注意以下问题：
+> RAID卡, CPU，空余的内存插槽。根据这些情况大致了解硬件的来源和性能改进办法。
+> 网卡是否设置好？是否正运行半双工状态？速度是10MBps？有没有TX/RX报错？
+
+`sudo dmidecode | more`:主机硬件信息 的工具（通过 DMI/SMBIOS 表）。它能显示：
+- BIOS 版本
+- 主板型号
+- CPU、内存插槽信息
+- 厂商信息（比如 Dell, HP, Amazon EC2 虚拟机）
+
+![alt text](image-25.png)
+
+`ip link show` or `ls /sys/class/net`: 查看实际网卡名字
+
+![alt text](image-26.png)
+
+`ethtool eth0`: 查看速率、双工模式、驱动信息
+
+![alt text](image-27.png)
+
+`ip addr show`：查看IP 地址、MAC、状态
+
+![alt text](image-28.png)
+
+![解读](image-29.png)
+
+`ip route show`：
+
+![alt text](image-30.png)
+
+![default路由解读](image-38.png)
+
+![docker路由解读](image-39.png)
+
+![子网路由解读](image-40.png)
+
+![本地子网直连路由解读](image-41.png)
+
+![网关直连路由解读](image-42.png)
+
+5. I/O 性能：
+`iostat -kx 2`
+`vmstat 2 10`
+`mpstat 2 10`
+`dstat --top-io --top-bio` 
+1. CPU:
+```bash
+# uptime，查看平均负载
+ubuntu@ip-172-31-40-134:~$ uptime
+ 05:39:21 up 4 days, 17:58,  1 user,  load average: 0.00, 0.00, 0.00
+
+# vmstat，查看系统范围内的cpu平均负载
+ubuntu@ip-172-31-40-134:~$ vmstat 1
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 2  0      0  84392  28100 615480    0    0     8    11   80    0  0  0 86  0 14  0
+ 0  0      0  84392  28100 615484    0    0     0     0   93   68  0  0 100  0  0  0
+ 0  0      0  84392  28100 615484    0    0     0     0   78   62  0  0 100  0  0  0
+ 0  0      0  84392  28100 615484    0    0     0     0   88   70  0  0 100  0  0  0
+ 0  0      0  84392  28100 615484    0    0     0     0   70   59  0  0 100  0  0  0
+
+# mpstat，查看所有CPU核信息
+ubuntu@ip-172-31-40-134:~$ mpstat -P ALL 1
+Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+
+05:42:35     CPU    %usr   %nice    %sys %iowait    %irq   %soft  %steal  %guest  %gnice   %idle
+05:42:36     all    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00
+05:42:36       0    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00  100.00
+```
+
+
+#sar,查看cpu信息
+ubuntu@ip-172-31-40-134:~$ sar -u
+Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+
+00:00:29        CPU     %user     %nice   %system   %iowait    %steal     %idle
+00:10:47        all      0.06      0.00      0.05      0.02      0.01     99.85
+00:20:39        all      0.05      0.00      0.04      0.01      0.01     99.89
+00:30:47        all      0.04      0.00      0.04      0.01      0.01     99.90
+00:40:47        all      0.07      0.00      0.05      0.01      0.01     99.86
+
+# pidstat, 每个进程cpu用量分解
+ubuntu@ip-172-31-40-134:~$ pidstat -u 1 -p 1
+Linux 6.14.0-1012-aws (ip-172-31-40-134)        09/28/25        _x86_64_        (1 CPU)
+
+05:44:39      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:44:40        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
+05:44:41        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
+05:44:42        0         1    0.00    0.00    0.00    0.00    0.00     0  systemd
+
+# perf，跟踪进程内函数级别cpu使用量
+
+
 
 
 ## kubernetes排查思路
