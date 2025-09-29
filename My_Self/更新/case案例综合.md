@@ -316,3 +316,98 @@ journalctl -u kubelet -n 200 --no-pager
 
 #### 查看service绑定后端的端口或者其他信息是否对：
 `kubectl -n timeapp get endpointslice -l kubernetes.io/service-name=web -o wide`
+
+
+#### docker排查思路
+1. 容器起不来：
+```bash
+docker logs <container_id>        # 查看报错
+docker inspect <container_id>     # 检查配置和退出码
+```
+2. 性能瓶颈
+```bash
+docker stats                      # 实时查看容器资源
+top / htop / iostat               # 宿主机层面
+```
+
+3. 网络异常
+```bash
+docker exec -it game_server ping db   # 测试容器间连通性
+iptables -L -n                        # 检查宿主机防火墙
+```
+
+4. 扩缩容：
+```bash
+#!/bin/bash
+NUM=$1
+docker-compose up -d --scale game_server=$NUM
+# 执行：./scale.sh 5 → 一键扩容到 5 个。
+```
+
+## prometheus
+1. 查看配置是否生效：
+```bash
+prometheus --config.file=/etc/prometheus/prometheus.yml --web.enable-lifecycle
+```
+
+2. 修改 prometheus.yml 添加/删除监控对象： 
+```yaml
+scrape_configs:
+  - job_name: 'game_servers'
+    static_configs:
+      - targets: ['10.0.0.11:9100', '10.0.0.12:9100']
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['localhost:8080']
+```
+
+3. 查询与排障
+```bash
+node_cpu_seconds_total{mode="user"}
+rate(container_cpu_usage_seconds_total[5m])
+```
+
+4. 告警配置
+```yaml
+groups:
+  - name: system.rules
+    rules:
+    - alert: HighCPUUsage
+      expr: avg(rate(node_cpu_seconds_total{mode="user"}[5m])) > 0.8
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "CPU usage > 80%"
+        description: "Instance {{ $labels.instance }} CPU usage too high"
+```
+- PromQL查询流程：
+    - 选择指标（Metric Selection）
+
+        ![alt text](image-61.png)
+    
+    - 标签过滤（Label Filtering）
+
+        ![alt text](image-62.png)
+
+    - 时间范围选择（Range Vector）
+
+        ![alt text](image-63.png)
+
+    - 函数计算（Functions）
+
+        ![alt text](image-64.png)
+
+    - 分组聚合（Aggregation）
+
+        ![alt text](image-65.png)
+
+    - 条件判断（Comparisons）
+
+        ![alt text](image-66.png)
+
+
+## grafana日常操作
+```bash
+
+```
