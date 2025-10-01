@@ -1,17 +1,17 @@
 1. kubernetes的基本组件及功能？
 - master node
-    - kube-apiserver:作为Kubernetes API的前端，提供了RESTful风格的API接口，是各个组件沟通的枢纽，负责认证、授权、准入控制等操作。
-    - etcd：一个高可用的分布式键值存储系统，作为Kubernetes集群的唯一数据源，存储集群的所有配置信息和状态数据。提供了数据的持久化存储和分布式一致性保证，确保在集群中的多个节点之间数据的一致性和可靠性。
-    - kube-scheduler：根据节点的资源可用性、Pod的资源请求、节点的亲和性和反亲和性等策略，对所有可用节点进行评估和筛选，选择最优的节点来运行Pod。
-    - kube-controller-manager：是一组控制器的集合，每个控制器负责管理集群中特定类型的资源，确保集群的状态始终符合用户定义的期望状态。
+    - kube-apiserver:作为Kubernetes API的前端，提供了**RESTful风格的API接口**，作为各组件通信的唯一桥梁，接收并转发所有集群请求，是 K8s 的 “入口”。**负责RBAC 权限控制（验证用户 / 组件的操作权限**，确保集群安全）。
+    - etcd：K8s 集群唯一的**高可用的分布式键值（key-value）存储**，保存集群所有资源的 **“配置信息” 与 “运行状态”**（如 Deployment 的期望副本数、Pod 的运行节点、Service 的 IP 地址）； 提供高可用（多节点部署）与数据一致性保障（基于 Raft 协议）；确保在集群中的多个节点之间数据的一致性和可靠性。
+    - kube-scheduler：根据节点的**资源可用性、Pod的资源请求、节点的亲和性和反亲和性等策略**，对所有可用节点进行评估和筛选，选择最优的节点来运行Pod。
+    - kube-controller-manager：是一组控制器的集合，每个控制器负责管理集群中特定类型的资源，**确保集群的状态始终符合用户定义的期望状态**。
 
         ![alt text](image-19.png)
 
-    - cloud-controller-manager(optional)：与云服务提供商的API进行交互，将与云平台相关的控制逻辑从主控制平面中分离出来。允许Kubernetes与不同的云服务提供商（如AWS、GCP、Azure等）集成，实现云资源的管理和调度，如弹性IP、负载均衡器等。
+    - cloud-controller-manager(optional)：与云服务提供商的API进行交互，将与云平台**相关的控制逻辑从主控制平面中分离出来**。允许Kubernetes与不同的云服务提供商（如AWS、GCP、Azure等）集成，**实现云资源的管理和调度**，如弹性IP、负载均衡器等。
 - worker node
-    - kubelet：作为节点上的代理，负责与控制平面进行通信，接收和执行控制平面下发的任务比如管理节点上的Pod和容器的生命周期，监控容器的资源使用情况，并将节点和容器的状态信息反馈给控制平面。
-    - kube-proxy：在每个节点上运行，负责实现Kubernetes服务的网络代理和负载均衡功能，为服务创建和维护网络规则，将服务的请求转发到对应的Pod上，实现服务的外部访问和内部通信，支持多种代理模式，如用户空间代理模式、IPVS代理模式等。
-    - Container Runtime：负责在节点上运行和管理容器，是容器化应用程序的运行环境，Kubernetes支持多种容器运行时，如Docker、Containerd、CRI-O等，这些容器运行时通过容器运行时接口（CRI）与Kubernetes进行交互。
+    - kubelet：作为节点上的代理，负责与控制平面进行通信，接收和执行控制平面下发的任务比如管理节点上的**Pod和容器的生命周期**，监控**容器的资源使用情况**，并将**节点和容器的状态信息**反馈给控制平面。
+    - kube-proxy：**在每个节点上运行**，负责实现Kubernetes服务的**网络代理和负载均衡功能**，为服务创建和**维护网络规则(iptable)**， 将 Service 的请求（如 ClusterIP、LoadBalancer）转发到后端的 Pod，实现负载均衡（如轮询调度）；**实现服务的外部访问和内部通信**，支持多种代理模式，如用户空间代理模式、IPVS代理模式等。
+    - Container Runtime：负责在节点上**运行和管理容器**，是容器化应用程序的运行环境，Kubernetes支持多种容器运行时，如Docker、Containerd、CRI-O等，kubelet**通过 CRI 调用容器运行时（如 containerd）执行‘拉取镜像、创建容器、启动容器’等底层操作”**。
 
         ![alt text](image-20.png)
 
