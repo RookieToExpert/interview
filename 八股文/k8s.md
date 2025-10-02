@@ -28,8 +28,8 @@
     - Service：**通过selector关联 Pod（如app=nginx），为动态变化的 Pod 提供固定访问入口**。Service可以通过ClusterIP、NodePort、LoadBalancer等不同的类型暴露给**外部或内部客户端访问**。
     - ingress：是一种用于**管理外部访问 Service 的 HTTP/HTTPS 路由规则**。它可以根据HTTP/HTTPS请求的域名、路径等信息将请求转发到不同的Service，实现了基于**域名和路径的路由**。
 - 存储资源对象
-    - PersistentVolume（PV）：是集群中的存储资源，它是独立于Pod的存储抽象。PV可以是NFS、iSCSI、Ceph等不同类型的存储，为Pod提供持久化存储。
-    - PersistentVolumeClaim（PVC）：是用户对存储资源的请求，它与PV进行绑定，为Pod提供具体的存储卷。PVC可以根据存储的大小、访问模式等要求动态分配PV。
+    - PersistentVolume（PV）：是集群中的存储资源，它是独立于Pod的存储抽象。**PV可以是NFS、iSCSI、Ceph等不同类型的存储**，为Pod提供持久化存储。
+    - PersistentVolumeClaim（PVC）：**是用户对存储资源的请求，它与PV进行绑定**，为Pod提供具体的存储卷。PVC可以根据存储的大小、访问模式等要求动态分配PV。
 
     **2.1.**：Kubernetes里的Service、Deployment、Pod、StatefulSet分别是什么
 
