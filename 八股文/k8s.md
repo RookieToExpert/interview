@@ -60,7 +60,7 @@
 - API Server ↔ Kubelet: Kubelet拉取Pod信息，并上报状态。
 - Kubelet ↔ 容器运行时: Kubelet指示容器运行时启动和管理容器。
 - Pod ↔ Service: Pod通过Service进行负载均衡和服务发现。
-
+- 我的回答：首先用户通过 kubectl发起 Pod 创建请求，包括用 kubectl apply -f nginx-deploy.yaml或kubectl create deployment nginx --image=nginx，kubectl 将请求封装为 RESTful API 调用，发送给 API Server，API server要去做语法，权限和资源的验证，然后再将具体的配置信息写入到etcd 当中，那么此时Controller Manager 中的Deployment Controller通过‘watch API’监听 etcd 中 Deployment 的变化，发现‘期望状态（副本数 3）’与‘实际状态（初始无 ReplicaSet/Pod）’不一致，会向 API Server 发起请求创建 1 个 ReplicaSet（关联 Deployment，期望副本数 3），API Server 验证后将 ReplicaSet 写入 etcd。Controller Manager 中的ReplicaSet Controller也通过 watch 发现新的 ReplicaSet，然后再请求创建pod这一系列操作。Scheduler 通过‘watch API’监听 etcd 中‘状态为 Pending 且未绑定 Node’的 Pod，那 API Server 就会去进行节点筛选，去结合pod的资源请求的情况以及评估节点的资源情况，还有就是节点亲和性、pod 亲和性反亲等等这些策略去判断得到一个最优的节点，然后通过api server将节点同步回etcd。每个 Node 上的 Kubelet 通过‘watch API’监听 etcd 中‘绑定到本 Node 的 Pod’，通过 CRI（容器运行时接口）调用 containerd/Docker，发送‘拉取镜像→创建容器→启动容器’的指令。
 
 4. 在k8s中，如何进行日志和监控的管理
 - 综合解决方案：
@@ -116,6 +116,8 @@
         kubectl get roles
         kubectl get rolebindings
         ```
+    - 我的回答：首先如果 Pod 出现问题了，那先我想到了思路是去检查 Pod 的本身的一些情况，第一层，查看pod本身的状态，第一个通过get命令全去看它的状态，常见的有Pending（调度失败）、CrashLoopBackOff（容器反复崩溃）、ImagePullBackOff（镜像拉取失败）等，以及node情况，是否有绑定到一个node，如果没有，可能是调度情况等，还可以加上-o yaml的选项去查看具体pod request和limit的资源是多少。第二个通过describe命令看具体的event日志，可以看到一些关于镜像拉取失败，PVC绑定失败，资源不足等的一些日志。第三个可以通过logs去实际查看上一次容器崩溃的具体日志（排查 CrashLoopBackOff 原因）。第四个通过exec去测试网络连通性，包括用ping，curl，nc等进行一些端口连通性，如果是数据库就尝试连接数据库判断是不是网络联通问题。然后就是查看node的状态，第一个通过get命令全去看它的状态，看节点是不是ready。第二个通过 describe命令，看节点的taint，还有Allocatable vs Allocated：节点已分配的 CPU / 内存是否接近 Allocatable。然后可以在宿主机上用htop去看一看资源使用情况。第三个可以通过journalctl看kubelet的日志，日志中可能可以看到容器启动失败和网络插件异常等报错。 此时我会去查看上层核心组件相关的问题，包括 API,Server、etcd 等等，第一，通过get -n kube-system看组件是不是running的状态。第二，通过 logs 去查看具体的日志。如果api-server有问题，你无法通过kubectl查看日志，可以通过crictl或者去宿主机上看/var/log/kubernetes/apiserver.log。最后去看RBAC权限相关的问题，serviceaccounts，roles，roleblinding等。
+  
 
 6. 请介绍Kubernetes的三种探针
     - **存活探针（livenessProbe）**:判断容器是否“活着”
@@ -142,6 +144,9 @@
         ![alt text](image-24.png)
 
         ![alt text](image-25.png)
+
+    - 回答：密码 有三种探针，第一种是 Liveness Probe 就是存活探针，第二种是 redness probe，就是就绪探针。第三个是 STARTUP probe，就是启动探针，那第一个存活探针，是检测容器是否处于健康运行状态，避免‘容器进程存活但服务卡死’（如 JVM 死锁），常见的配置就是向http://<容器IP>:<端口>/<健康路径>发请求，看状态码，后如果说请求没有反应，就会去重启这个容器。那么第二个就是就绪探针，检测容器是否能提供正常服务，避免 “容器启动但服务未就绪（如数据库未初始化）” 时接收流量；通常是可能会去尝试建立一个 TCP 请求，那如果说这个 TCP 请求无法建立，就说明它这个服务没有 ready，kubelet 将 Pod 的Ready状态设为False，Service 自动从 Endpoints 列表中移除该 Pod，不转发流量；那第三个就是 start up，就是启动探针，针对启动慢的容器（如 Tomcat、PostgreSQL，需 5-10 分钟启动），避免被 Liveness Probe 误判为 “启动中异常” 而频繁重启；那启动探针它优先级是高于前面两个探针的，相当于如果你给一个 Pod 设定的启动探针，那它会先去测试这个启动探针。通常启动探针可能就是让一个命令在这个 Pod 上。可能就用个 cat，一个文件，然后通过这个去判断这个容器是否已经启动了。
+
 
 7. K8s的网络插件有哪些？
 - **Calico(192.168.0.0/16 或 10.244.0.0/16)**：
