@@ -15,6 +15,9 @@
 
         ![alt text](image-20.png)
 
+- 回答：K8s集群核心架构分为控制平面master node，以及计算节点worker node，在master node上面常见的组件就是 API server，etcd，control manager以及 scheduler。关于api server，它是相当于所有组件沟通的唯一通信枢纽，提供 RESTful API，负责权限验证与请求校验，也是所有操作的唯一入口并且负责将合法请求写入etcd。etcd是一个高可用的分布式键值存储，它也是 Kubernetes 中唯一的一个数据源，存储集群所有资源的配置与状态，通过 Raft 协议保障高可用与数据一致性；Controller是一组控制器集合(Deployment，Node和Endpoints controller)，通过 Watch 机制监控资源状态，确保实际状态与期望状态一致（如补充缺失的 Pod）；那么再接下来就是 schedule，根据节点的**资源可用性、Pod的资源请求、节点的亲和性和反亲和性等策略**，对所有可用节点进行评估并选择最优的节点，最终写入etcd。 关于work node，上面有三个核心组件，Kublet，container runtime和kube-proxy。Kublet是负责去接收 KPI Server 下达的命令，管理Pod和容器的生命周期，并且它也会定期将节点的和容器的资源使用情况和运行情况反馈给 API Server，那它也是通过CRI调用container runtime去执行底层的像拉取镜像、创建容器、启动容器等操作。那么最后就是 kube-proxy，在每个节点上运行，负责实现Kubernetes服务的网络代理和负载均衡的功能。通过 iptables/ipvs 维护网络规则，实现服务的外部访问和内部通信以及service的负载均衡。
+
+
 2. 详细说明K8S的架构和资源对象。
 - **核心资源对象**：
     - Pod:是K8S中**最小的可部署和管理的计算单元**，一个Pod可以包含一个或多个紧密相关的容器。Pod中的容器共享**网络命名空间(同一 IP 和端口空间)和存储卷**，它们可以通过localhost进行通信，并且可以访问共享的存储。
@@ -30,6 +33,8 @@
 - 存储资源对象
     - PersistentVolume（PV）：是集群中的存储资源，它是独立于Pod的存储抽象。**PV可以是NFS、iSCSI、Ceph等不同类型的存储**，为Pod提供持久化存储。
     - PersistentVolumeClaim（PVC）：**是用户对存储资源的请求，它与PV进行绑定**，为Pod提供具体的存储卷。PVC可以根据存储的大小、访问模式等要求动态分配PV。
+- 回答：资源对象的话，那首先就是有一些核心的资源对象，包括 namespace、Pod，以及 node。 那 name space 它是一个将不同的资源组划分成不同的一个逻辑。组，那这个就是每个逻辑组就是一个 name space，那 name space 它是通过逻辑隔离将不同的资源隔离开，那这个是一个 name space，那在就是 Pod，Pod 是这个 key space 中部署和可调度的最小单位，那它是一个 POS 上可以有一个或者一组容器运行在内。那每个 POS 它都会有一个唯一的网络命名空间，包括一个固定的 IP 和这个端口空间，那再就是 NODE，NODE 就是实际的运行的物理节点，它可以是一台虚拟机，也可以是一个物理机，那么在接下来就是。工作复杂的资源类型，那就其中比较常见的就是 deployment，它通过 safe set 去管理 Pod，通常 deployment 它都是管理一些无状态的 Pod，那他通过精通可以实现包括滚动更新和回滚的操作，确保这个炮的时钟运行在一个期望的一个副本数。那在就是到这个 stable set 和 deployment 不一样，它通常是管理有状态的一些应用，那包括像数据库、Redis 等等，那通常 stable or set 它是。有，对，每一个 Pod 会有唯一的一个命名空间，命名，命名的空间就是相当于有一个固定的 Pod，有一个固定的名字，不管它重启、删除、创建，它都是有固定的一个名字，并且会有一个配对的标识符，DNS 的标识符。还有再包括他对每个 Pod 都是一个有序操作，包括创建，比方说是零一2创建，那他删除的时候就是210这样删除，那。再就是他对每一个 Pod 都会有一个存储卷绑定、PVC 绑定，确保每一个应用它不论是删除、重启它的一个状态始终是能够持可持有、持久化的保存着的，那再就到。一个网络方面的资源，就是包括 service 和 Ingress，那 service 它就是通过。一，他就是相当于他就实现了为动态的一个抛提供一个唯一的网络入口，那它通常就是有通过像 class 的 IP、NODE、port，还有 loadbalancer 等等组件去实现网络外或者网络内的一个通信，就是 POS 之间的通信。那具体就是，还有就是 Ingress，它就是负责外部 serve 对外暴露的 service 的流量的一个。Http。http s 的一个。路由规则，它实现了具体的基于，就是这个 host name 和 path 之间的一个路由规则。那最后就是一个，嗯，这个存储类型的资源，包括像 PV。persistent volume 它通常是可以是一个警告，可以是一个 NFS 这些具体的一个存储配置，那它是独立于 Kubernetes 的一个单独的一个配置资源，并且不。独立于 Pod 的一个抽象概念，那通常它会跟通过，就是通常资源会通过 PVC 去绑定到对应的一个 PV，那 PVC 就会定义了这个资源需要的一些存储的一个信息。
+
 
     **2.1.**：Kubernetes里的Service、Deployment、Pod、StatefulSet分别是什么
 
