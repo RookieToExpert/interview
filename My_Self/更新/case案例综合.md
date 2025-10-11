@@ -411,3 +411,16 @@ groups:
 ```bash
 
 ```
+
+
+
+
+So, here’s the situation: we had this client whose on-prem data center was expiring, and they wanted to move their core business systems to the cloud. The plan was to lift-and-shift all their VMs to Azure VMs using Azure Migrate, set up a site-to-site VPN to connect on-prem and cloud, create private endpoints, and perform the migration during off-peak hours using full + incremental backups. Our tech team was responsible for setting up the migration pipeline—installing agents on the source servers, registering them to the cloud vault, setting up a local appliance as a staging server, etc. Everything went smoothly at first, but during the incremental backup phase, a few MySQL servers failed to sync. The cloud side threw a "High churn issue limit" error, meaning the disk IOPS on the Azure side was overloaded.
+My job, as the technical lead, was to figure out the root cause and propose a solution the client could accept.
+First, I confirmed the error by checking the backend logs and the agent logs on the MySQL servers. The error matched what was shown in the portal.
+Next, I scheduled a remote session with the client to access their on-prem environment. I started by checking if the walinuxagent process was running properly using commands like ps -ef | grep walinuxagentand ps aux | grep walinuxagent. I also restarted the agent with sudo systemctl restart --now walinuxagent.service. Then, I used iostat -dx 600 3and checked /proc/diskstatsto analyze disk write activity.
+The data showed a write throughput (wkB/s) of about 8.34 MB/s and an average write I/O size (wareq-sz) of 17 KB. Comparing this with Azure’s disk IOPS limits—Standard HDD supports around 256 IOPS, while Premium SSD ranges from 1280 to 2560 IOPS—it became clear the issue was the high I/O load. Since databases like MySQL with InnoDB use 16KB pages, the Standard disk just couldn’t handle the frequent write operations typical for database or log servers.
+Based on this, the standard recommendation would be to upgrade the replica disk to Premium SSD. But that meant switching both the blob storage and disks to Premium tiers, which cost about 10x more for storage and 4x more for disks. The client’s budget was tight, and they weren’t happy—they even accused us of just trying to upsell instead of solving the problem.
+Instead of pushing back, I thought of our internal Database Migration Service (DMS), which is designed for high I/O scenarios like this. Even though DMS isn’t my team’s product, I reached out to their technical account manager, explained the client’s requirements—MySQL 5.7, 80GB of data, downtime under 15 minutes—and set up a three-way meeting. The DMS team proposed a binlog real-time sync + incremental cutover plan.
+During the discussion, I showed the client a cost comparison: using DMS would avoid extra intermediate resources, and long-term, using a PaaS database would save money with built-in high availability, backups, and reduced maintenance. I also promised to personally oversee the testing and migration to ease their concerns.
+In the end, the client agreed to use DMS. The migration succeeded with zero data loss and downtime kept to just minutes. Long-term, moving to a PaaS SQL solution will also save them money. The client was really satisfied and has specifically requested me for support in later projects.
