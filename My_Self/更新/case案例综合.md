@@ -76,11 +76,12 @@
     - 核心分单逻辑位于 main.py 中，系统通过周期性地轮询队列 API（使用 requests）获取新案例，并利用 deque 来管理本地队列，按工程师的能力进行轮转分配，分配结果保存在内存中的 assigned_cases 列表。
 3. **后端通过 FastAPI 框架在 api.py 中暴露了多个监控接口，如 /cases 和 /stats，供前端使用**：
 系统的配置文件集中存储在 settings.yaml 中，主要包含队列和分单 API 地址、轮询间隔以及工程师的能力配置。该配置文件的默认路径在容器内部为 /app/config/settings.yaml。开发和本地运行时可以通过顶层的 docker-compose.yml 文件一键启动，后端端口映射到 8000，前端端口映射到 8080，同时也支持单独构建和运行 Docker 镜像，相关的 Dockerfile 已经提供。
+
 **A**：
-我主要采取了以下行动来解决问题：
+- 我主要采取了以下行动来解决问题：
 **​​基础设施即代码 (IaC)​​：** terraform文件模拟了标准的生产级模块化设计，就是将环境和代码分离，区分环境配置和资源模块，我把我需要的资源像资源组，虚拟网络，虚拟机等等组件都做成了独立的、可复用的模块。然后，在为生产环境部署时，我只需要去调用这些现成的模块，并传入生产环境特定的参数，比如规模、配置等等，就能快速，可复用地管理这一套技术措施。还有其中比较重要的文件比如providers.tf用于配置与云提供商（这里是 azurerm）的连接和认证，还有​​terraform.tfstate是terraform生成的状态文件，映射了您代码中定义的资源和真实云上资源的关系，我是将它存在云端。
-​​**Kubernetes集群搭建​​：** 我在三台服务器上基于​​kubeadm​​、​​containerd​​和​​flannel​​自主搭建并配置了一个高可用的生产级Kubernetes集群，并且将前端后端打包成镜像部署到集群中。
-​​**CI流水线建设​​：** 随后就是会去搭建azure DevOps的pipeline和argocd的gitOps，最后可以实现只要github上代码更新，Azure DeVops通过GitHub Webhook通知，并启动一个构建机去拉取github中的代码，并且用docker把它打包成镜像然后走443上传到我们的dockerhub上，然后我们在集群中还安装了argocd，并且将当前集群中所有yaml文件放到github上，包括一个base目录所有环境的通用配置基础，以及一个overlays目录，里面的kustomization.yaml文件会指向base目录，ArgoCD会开始持续监控Git仓库的变更，我这边只要有新的commit，argocd监听到后就会将前端后端的yaml文件中的镜像版本更新，然后再自动部署到集群中。
+​​- **Kubernetes集群搭建​​：** 我在三台服务器上基于​​kubeadm​​、​​containerd​​和​​flannel​​自主搭建并配置了一个高可用的生产级Kubernetes集群，并且将前端后端打包成镜像部署到集群中。
+​​- **CICD流水线建设​​：** 随后就是会去搭建azure DevOps的pipeline和argocd的gitOps，最后可以实现只要github上代码更新，Azure DeVops通过GitHub Webhook通知，并启动一个构建机去拉取github中的代码，并且用docker把它打包成镜像然后走443上传到我们的dockerhub上，然后我们在集群中还安装了argocd，并且将当前集群中所有yaml文件放到github上，包括一个base目录所有环境的通用配置基础，以及一个overlays目录，里面的kustomization.yaml文件会指向base目录，ArgoCD会开始持续监控Git仓库的变更，我这边只要有新的commit，argocd监听到后就会将前端后端的yaml文件中的镜像版本更新，然后再自动部署到集群中。
  
 具体：
 - 底座我们选择在环境中部署了三台服务器，通过kubeadm从0-1搭建了一个K8s集群，作为我们后续部署的基础。
