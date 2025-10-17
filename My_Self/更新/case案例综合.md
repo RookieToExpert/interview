@@ -12,14 +12,16 @@
 
 #### 技术板块(迁移时high churn issue)
 #### 性能
-**S**：之前对接过一个客户，因本地数据中心到期，希望将本地核心业务迁移至云端，整体数据中心的虚机整体采用Azure migrate工具进行平迁至Azure VM，通过site-to-site VPN打通本地和云端网络，云端创建private endpoint，在业务低峰期通过全量+增量备份进行迁移任务。我们作为技术团队负责搭建前期的迁移链路，包括在源端服务器上配置agent，将agent注册至云端保管库并启用agent，建立本地appliance作为迁移任务的中转服务器，一切都正常进行，但是在增量备份阶段，有几台 MySQL 服务器数据同步失败，云端报错 “High churn issue limit”，提示云端磁盘接受的磁盘IO速率过载。
+**S**：之前对接过一个客户，因本地数据中心到期，希望将本地核心业务迁移至云端，整体数据中心的虚机整体采用Azure migrate工具进行平迁至Azure VM，通过site-to-site VPN打通本地和云端网络，云端创建private endpoint，在业务低峰期通过全量+增量备份进行迁移任务。我们作为技术团队负责搭建前期的迁移链路，包括在源端服务器上配置agent，将agent注册至云端保管库并启用agent，建立本地appliance作为迁移任务的中转服务器，一切都正常进行，但是在增量备份阶段，有几台 MySQL 服务器数据同步失败，云端报错 “High churn issue limit”，提示云端磁盘接受的磁盘IO速率过载。通常原因是因为源服务器的IOPS过高，通常这一类型服务器是数据库服务器，日志服务器等写入操作非常频繁的服务器。
 
 **T**：作为技术对接工程师，核心任务是找到具体数据同步出错的根因，并且给出客户可接受的一个解决方案。
 
 **A**：
 - 确认报错：通过后台查看后端日志以及搜去本地sql服务器的代理日志，确认报错信息和portal端一致。
 
-- 定位root cause：随后与客户约定时间，远程接入本地环境，先通过`ps -ef | grep walinuxagent`和`ps aux | grep walinuxagent`看一下这个代理进程是否正常在运行，并且通过`sudo systemctl restart --now walinuxagent.service`，通过```iostat -dx 600 3```以及查看`/proc/diskstats`日志查看磁盘平均每秒写入的数据量和单次写入操作的平均大小：
+- 定位root cause：随后与客户约定时间，远程接入本地环境：
+    - 先通过`ps -ef | grep walinuxagent`和`ps aux | grep walinuxagent`看一下这个代理进程是否正常在运行，并且通过`sudo systemctl restart --now walinuxagent.service`。
+    - 查看服务器本地的资源是否有任何报错情况，系统日志主要通过`journalctl;`, `dmesg`, `ifconfig`或`ip -s link`看看是不是用像OOM报错, CPU throttling调度问题, 磁盘I/O报错 网络丢包的问题等等, 系统核心资源包括CPU，内存，网络和磁盘I/O主要先看系统整体负载，包括用`vmstat`, `iostat`, `dstat`, `mpstat`, `free`,`sar`, 查看CPU，内存和磁盘I/O等的相关使用率和饱和率情况，比如CPU的进程等待队列，CPU闲置时间，内存的可用主存，si和so指标，磁盘I/O的每次读写操作平均大小和每秒读写操作的大小，以及看磁盘容量中物理磁盘和inode容量等等。再可以通过`ip`, `ifconfig`, `ss`看一些网络吞吐量，重传数量，具体端口监听情况等，具体进程层面就可以通过`htop`, `pidstat`, `/proc/PID/stat(看内存) 或者/shedstat(看CPU) 或者/sched`看单个进程的cpu/memory的使用情况，也能看到像进程每次CPU调度的平均和最大延时等等。我们手机了这些指标后，主要观测的重点指标是通过```iostat -dx 600 3```以及查看`/proc/diskstats`日志得到磁盘平均每秒写入的数据量和单次写入操作的平均大小：
 
     ![alt text](image-12.png)
 
