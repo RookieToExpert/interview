@@ -1,0 +1,18 @@
+So, here was the situation in our team: as the team grew, we had a mix of new, mid-level, and senior colleagues, and they were all progressing at different speeds. This became a real problem when our lead was manually assigning cases.
+It was inefficient and very prone to errors. Sometimes, the workload wasn't distributed evenly—some people got too many cases, others too few. Other times, complex cases were accidentally assigned to newcomers who weren't ready yet, which led to missed SLAs and a bunch of other issues.
+So, to improve the team's overall efficiency, ensure we hit our SLAs, and also as a personal learning opportunity for me, I decided to step up and build a small internal tool to automate case assignment. The goal was to automatically route cases to the most appropriate team member.
+Now, while the main application code was written by another colleague, ​​my core mission was to design and implement a complete, cloud-native, and fully automated DevOps and GitOps workflow for it.​​
+Basically, I was in charge of the entire infrastructure and automation pipeline. This involved four key things:
+​​First, automating all infrastructure using Infrastructure as Code, or IaC.​​
+​​Second, building a highly available Kubernetes cluster to host the application.​​
+​​Third, creating an end-to-end CI pipeline for automatic building and container image pushing.​​
+​​And finally, implementing a GitOps-based CD process for fully automated, hands-off deployments.​​
+Here’s a breakdown of what I did to make this happen:
+​​1. On the Infrastructure as Code (IaC) part:​​
+I used Terraform. I structured the Terraform files to mimic a standard, production-grade modular design. The key was separating the environment configuration from the resource modules. So, I created independent, reusable modules for everything I needed—like resource groups, virtual networks, virtual machines, and so on.
+Then, when it was time to deploy to production, I could just call these pre-built modules and feed in production-specific parameters, like scale and configuration. This made managing the whole setup fast and reusable. Important files included things like providers.tfto handle the connection and authentication with our cloud provider, which was Azure. I also stored the terraform.tfstatefile remotely in the cloud; that's the file that maps the resources in my code to the actual resources in the cloud.
+​​2. For the Kubernetes cluster setup:​​
+I built a production-ready, highly available Kubernetes cluster from scratch on three servers. I used tools like kubeadmfor the setup, containerdas the runtime, and flannelfor networking. Once the cluster was up and running, I packaged and deployed both the front-end and back-end of our tool as container images onto it.
+​​3. For the CI/CD pipeline:​​
+This is where I tied everything together. I set up the pipeline in Azure DevOps and used ArgoCD for GitOps. The final flow worked like this: Whenever code was updated in our GitHub repository, a webhook would notify Azure DevOps. This would trigger a build agent to pull the latest code, build it using Docker, and push the new image to our Docker Hub registry.
+Meanwhile, we had ArgoCD installed in our cluster. I stored all the Kubernetes YAML files in another GitHub repository, organized with a basedirectory for common configurations and an overlaysdirectory for environment-specific customizations. ArgoCD was continuously monitoring this Git repo. So, as soon as I committed a new change—like updating the image version—ArgoCD would detect it, synchronize the configuration, and automatically deploy the new version to the cluster, achieving a truly hands-off release process.

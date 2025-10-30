@@ -19,9 +19,9 @@
 **A**：
 - 确认报错：通过后台查看后端日志以及搜去本地sql服务器的代理日志，确认报错信息和portal端一致。
 
-- 定位root cause：随后与客户约定时间，远程接入本地环境：
-    - 先通过`ps -ef | grep walinuxagent`和`ps aux | grep walinuxagent`看一下这个代理进程是否正常在运行，并且通过`sudo systemctl restart --now walinuxagent.service`。
-    - 查看服务器本地的资源是否有任何报错情况，系统日志主要通过`journalctl;`, `dmesg`, `ifconfig`或`ip -s link`看看是不是用像OOM报错, CPU throttling调度问题, 磁盘I/O报错 网络丢包的问题等等, 系统核心资源包括CPU，内存，网络和磁盘I/O主要先看系统整体负载，包括用`vmstat`, `iostat`, `dstat`, `mpstat`, `free`,`sar`, 查看CPU，内存和磁盘I/O等的相关使用率和饱和率情况，比如CPU的进程等待队列，CPU闲置时间，内存的可用主存，si和so指标，磁盘I/O的每次读写操作平均大小和每秒读写操作的大小，以及看磁盘容量中物理磁盘和inode容量等等。再可以通过`ip`, `ifconfig`, `ss`看一些网络吞吐量，重传数量，具体端口监听情况等，具体进程层面就可以通过`htop`, `pidstat`, `/proc/PID/stat(看内存) 或者/shedstat(看CPU) 或者/sched`看单个进程的cpu/memory的使用情况，也能看到像进程每次CPU调度的平均和最大延时等等。我们手机了这些指标后，主要观测的重点指标是通过```iostat -dx 600 3```以及查看`/proc/diskstats`日志得到磁盘平均每秒写入的数据量和单次写入操作的平均大小：
+    - 定位root cause：随后与客户约定时间，远程接入本地环境：
+        - 先通过`ps -ef | grep walinuxagent`和`ps aux | grep walinuxagent`看一下这个代理进程是否正常在运行，并且通过`sudo systemctl restart --now walinuxagent.service`。
+        - 查看服务器本地的资源是否有任何报错情况，系统日志主要通过`journalctl;`, `dmesg`, `ifconfig`或`ip -s link`看看是不是用像OOM报错, CPU throttling调度问题, 磁盘I/O报错 网络丢包的问题等等, 系统核心资源包括CPU，内存，网络和磁盘I/O主要先看系统整体负载，包括用`vmstat`, `iostat`, `dstat`, `mpstat`, `free`,`sar`, 查看CPU，内存和磁盘I/O等的相关使用率和饱和率情况，比如CPU的进程等待队列，CPU闲置时间，内存的可用主存，si和so指标，磁盘I/O的每次读写操作平均大小和每秒读写操作的大小，以及看磁盘容量中物理磁盘和inode容量等等。再可以通过`ip`, `ifconfig`, `ss`看一些网络吞吐量，重传数量，具体端口监听情况等，具体进程层面就可以通过`htop`, `pidstat`, `/proc/PID/stat(看内存) 或者/shedstat(看CPU) 或者/sched`看单个进程的cpu/memory的使用情况，也能看到像进程每次CPU调度的平均和最大延时等等。我们手机了这些指标后，主要观测的重点指标是通过```iostat -dx 600 3```以及查看`/proc/diskstats`日志得到磁盘平均每秒写入的数据量和单次写入操作的平均大小：
 
     ![alt text](image-12.png)
 

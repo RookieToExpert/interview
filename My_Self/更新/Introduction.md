@@ -6,6 +6,8 @@ them optimize how they use not onbly these essential services that our team is f
 
 Also, working with customers in this role has really helped me improve my communication skills. Beyond just solving technical problems, I’ve become really good at understanding the customer’s core needs and approaching solutions from their perspective.
 
+I believe these experiences are highly relevant to the centric role, and I am very confident in my ability to fulfill it. Please feel free to ask me any questions you may have.
+
 各位面试官好，非常感谢今天给我这个机会。我叫XXX，本科毕业于XXX大学，主修数学。毕业前后，我加入**微软云担任云计算技术支持工程师**。
 > 团队方向→工作范围→具体产品→工作重点→阐述经验→具体例子→沟通协作
 
